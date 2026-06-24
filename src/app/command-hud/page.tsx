@@ -1,6 +1,7 @@
 import Image from "next/image";
 import HudCheckbox from "../components/HudCheckbox";
 import NavBar from "../components/NavBar";
+import PageHeader from "../components/PageHeader";
 import { getAlexServiceRecord, getTodaySitrep } from "@/lib/notion";
 
 function ProgressBar({ value }: { value: number }) {

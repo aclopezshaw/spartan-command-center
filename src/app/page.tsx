@@ -1,153 +1,138 @@
-import { getAlexServiceRecord } from "../lib/notion";
 import Image from "next/image";
+import HudCheckbox from "./components/HudCheckbox";
 import NavBar from "./components/NavBar";
+import PageHeader from "./components/PageHeader";
+import { getAlexServiceRecord, getTodaySitrep } from "@/lib/notion";
 
 function ProgressBar({ value }: { value: number }) {
   return (
-    <div className="h-3 w-full overflow-hidden rounded-sm border border-cyan-700/50 bg-slate-800">
+    <div className="h-3 w-full overflow-hidden rounded-sm border border-cyan-700/50 bg-slate-800/80">
       <div
-        className="h-full bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.8)]"
-        style={{ width: `${value}%` }}
+        className="h-full bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.9)]"
+        style={{ width: `${Math.max(value, 2)}%` }}
       />
     </div>
   );
 }
 
-function StatCard({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div className="border border-cyan-700/50 bg-slate-950/80 p-4">
-      <p className="text-xs uppercase tracking-[0.25em] text-cyan-400">
-        {label}
-      </p>
-      <p className="mt-3 text-3xl font-bold text-white">{value}</p>
-    </div>
-  );
-}
-
-function SpartanRenderPanel() {
-  return (
-    <div className="flex min-h-[360px] flex-col justify-between border border-cyan-700/50 bg-black/70 p-5">
-      <div className="flex flex-1 items-center justify-center">
-        <div className="relative h-[360px] w-full overflow-hidden border border-cyan-600/40 bg-slate-900/80 shadow-[0_0_30px_rgba(8,145,178,0.2)]">
-          <Image
-            src="/images/alex-225-recruit.png"
-            alt="ALEX-225 recruit portrait"
-            fill
-            className="object-cover object-top"
-            priority
-          />
-        </div>
-      </div>
-
-      <div className="mt-4 flex justify-center gap-2">
-        <button className="bg-cyan-400 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-black">
-          Helmet Off
-        </button>
-
-        <button className="border border-cyan-700/50 px-4 py-2 text-xs uppercase tracking-[0.2em] text-cyan-300">
-          Helmet On
-        </button>
-      </div>
-
-      <div className="mt-4 text-center text-sm uppercase tracking-[0.25em]">
-        <span className="text-slate-500">Status: </span>
-        <span className="text-cyan-400 font-bold">Active</span>
-      </div>
-    </div>
-  );
-}
-
-function LoadoutPanel({
-  loadout,
+function ObjectiveRow({
+  label,
+  xp,
+  checked = false,
 }: {
-  loadout: {
-    armor: string;
-    patch: string;
-    weapon: string;
-    banner: string;
-  };
+  label: string;
+  xp: number;
+  checked?: boolean;
 }) {
-  const items = [
-    ["Armor", loadout.armor],
-    ["Patch", loadout.patch],
-    ["Weapon", loadout.weapon],
-    ["Banner", loadout.banner],
-  ];
-
   return (
-    <div className="border border-cyan-700/50 bg-black/60 p-5">
-      <p className="text-xs uppercase tracking-[0.3em] text-cyan-400">
-        Equipped Loadout
-      </p>
-
-      <div className="mt-5 space-y-3">
-        {items.map(([label, value]) => (
-          <div
-            key={label}
-            className="flex justify-between border-b border-cyan-900/60 pb-2 text-sm"
-          >
-            <span className="uppercase tracking-[0.2em] text-slate-500">
-              {label}
-            </span>
-            <span className="text-cyan-100">{value}</span>
-          </div>
-        ))}
+    <div className="flex items-center justify-between border-b border-cyan-900/60 py-1 text-xs">
+      <div className="flex items-center gap-3">
+        <div
+          className={`h-4 w-4 border ${
+            checked
+              ? "border-cyan-300 bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.8)]"
+              : "border-cyan-500/70 bg-black/40"
+          }`}
+        />
+        <span className={checked ? "text-cyan-100" : "text-slate-300"}>
+          {label}
+        </span>
       </div>
+      <span className="text-cyan-300">+{xp} XP</span>
     </div>
   );
 }
 
-function getNextRankXp(xp: number) {
-  const thresholds = [
-    8000, 16000, 24000, 32000, 40000, 48000,
-    56500, 65000, 73500, 82000, 90500, 99000,
-    108000, 117000, 126000, 135000, 144000, 153000,
-    162500, 172000, 181500, 191000, 200500, 210000,
-    220000, 230000, 240000, 250000, 260000, 270000,
-  ];
+function HudPanel({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="border border-cyan-500/30 bg-black/15 p-4 backdrop-blur-[2px] shadow-[0_0_16px_rgba(8,145,178,0.18)]">
+      <p className="text-xs uppercase tracking-[0.3em] text-cyan-400">
+        {title}
+      </p>
+      <div className="mt-3">{children}</div>
+    </div>
+  );
+}
 
-  return thresholds.find((threshold) => xp < threshold) ?? 270000;
+function getNumberProperty(properties: any, propertyName: string) {
+  const property = properties[propertyName];
+
+  if (!property) return 0;
+
+  if (property.type === "number") return property.number ?? 0;
+  if (property.type === "formula") return property.formula?.number ?? 0;
+  if (property.type === "rollup") return property.rollup?.number ?? 0;
+
+  return 0;
 }
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default async function Home() {
-  const record = await getAlexServiceRecord();
-  
-  const props = (record as any).properties;
-  console.log("SPARTAN:", props["Designation"]);
-  console.log("SERVICE SCORE:", props["Service Score"]);
-  console.log("TOTAL XP:", props["Total XP Earned"]);
+export default async function CommandHudPage() {
+  const sitrep = (await getTodaySitrep()) as any;
 
-  const properties = (record as any).properties;
+  const sitrepProperties = sitrep.properties;
 
-  const spartan = {
-    designation: properties["Designation"]?.title?.[0]?.plain_text ?? "ALEX-225",
-    rank: properties["Calculated Rank"]?.formula?.string ?? "BANANA",
-    xp: properties["Service Score"]?.formula?.number ?? 0,
-    nextRankXp: getNextRankXp(properties["Service Score"]?.formula?.number ?? 0),
-    shields: properties["Shields"]?.number ?? 100,
-    campaign: "Spartan Candidate Program",
-    campaignProgress: Math.round((2 / 42) * 100),
-    campaignDay: 2,
-    campaignLength: 42,
-    readiness: {
-      physical: properties["Physical Readiness"]?.number ?? 0,
-      recovery: properties["Recovery Readiness"]?.number ?? 0,
-      learning: properties["Learning Readiness"]?.number ?? 0,
-      administrative: properties["Administrative Readiness"]?.number ?? 0,
-    },
-    loadout: {
-      armor: "Recruit Armor",
-      patch: "Spartan Patch",
-      weapon: "Locked",
-      banner: "None",
-    },
-  };
-  
-  const xpProgress = Math.round((spartan.xp / spartan.nextRankXp) * 100);
-  const xpToNextRank = spartan.nextRankXp - spartan.xp;
+  const dailyXp = sitrepProperties["Daily XP"]?.formula?.number ?? 0;
+  const maxDailyXp = 200;
+
+  const serviceRecord = (await getAlexServiceRecord()) as any;
+
+  const serviceRecordProperties = serviceRecord.properties;
+
+  const projectedCampaignXp = getNumberProperty(
+    serviceRecordProperties,
+    "Projected Campaign XP"
+    );
+
+    const bronzeThresholdXp = getNumberProperty(
+    serviceRecordProperties,
+    "Bronze Threshold XP"
+    );
+
+    const silverThresholdXp = getNumberProperty(
+    serviceRecordProperties,
+    "Silver Threshold XP"
+    );
+
+    const goldThresholdXp = getNumberProperty(
+    serviceRecordProperties,
+    "Gold Threshold XP"
+    );
+
+    const medalPace =
+  goldThresholdXp > 0 && projectedCampaignXp >= goldThresholdXp
+    ? "🏅 Gold Pace"
+    : silverThresholdXp > 0 && projectedCampaignXp >= silverThresholdXp
+      ? "🥈 Silver Pace"
+      : bronzeThresholdXp > 0 && projectedCampaignXp >= bronzeThresholdXp
+        ? "🥉 Bronze Pace"
+        : "⚠ Below Bronze";
+
+  const dailyObjectives = [
+    ["Study 30 min", 35, "Study"],
+    ["96oz Water", 30, "Water"],
+    ["Sleep 7+ hrs", 25, "Sleep"],
+    ["Brush Teeth", 25, "Teeth"],
+    ["Shower", 25, "Shower"],
+    ["10k Steps", 20, "Steps"],
+    ["Stretch", 20, "Stretch"],
+    ["Meds", 10, "Meds"],
+    ["Read 1 Chapter", 10, "Read"],
+  ] as const;
+
+  const weeklyObjectives = [
+    ["Workout 3x", 200],
+    ["T Shot", 50],
+    ["Plan Week", 50],
+  ] as const;
 
   return (
     <main className="min-h-screen bg-black p-6 font-mono text-slate-100">
@@ -155,83 +140,104 @@ export default async function Home() {
         <NavBar />
 
         <section className="border border-cyan-600/60 bg-slate-950/90 p-6 shadow-[0_0_30px_rgba(8,145,178,0.25)]">
-          <div className="flex items-center justify-between border-b border-cyan-700/50 pb-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.4em] text-cyan-400">
-                UNSC Spartan Dossier
-              </p>
-              <h1 className="mt-2 text-5xl font-black tracking-tight">
-                {spartan.designation}
-              </h1>
-            </div>
+          <PageHeader eyebrow="UNSC Tactical Interface" title="Command HUD" />
 
-            <div className="text-right">
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
-                Current Rank
-              </p>
-              <p className="text-3xl font-bold text-cyan-300">{spartan.rank}</p>
-            </div>
-          </div>
+          <div className="mt-6 overflow-hidden border border-cyan-600/60 bg-black shadow-[0_0_35px_rgba(8,145,178,0.25)]">
+            <div className="relative min-h-[720px] overflow-hidden">
+              <Image
+                src="/images/hud-obstacle-course-3.png"
+                alt="UNSC obstacle course tactical HUD background"
+                fill
+                className="object-cover"
+                priority
+              />
 
-          <div className="mt-6 grid gap-6 lg:grid-cols-[2fr_1fr]">
-            <div className="space-y-6">
-              <section className="grid gap-4 md:grid-cols-4">
-                <StatCard label="Service Score" value={spartan.xp} />
-                <StatCard label="XP To Bronze 1" value={xpToNextRank} />
-                <StatCard label="Shields" value={`${spartan.shields}%`} />
-                <StatCard
-                  label="Campaign Day"
-                  value={`${spartan.campaignDay}/${spartan.campaignLength}`}
-                />
-              </section>
+              <div className="absolute inset-0 bg-black/20" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_35%,rgba(0,0,0,0.65)_100%)]" />
 
-              <div>
-                <div className="mb-2 flex justify-between text-sm text-slate-300">
-                  <span>XP PROGRESS</span>
-                  <span>
-                    {spartan.xp} / {spartan.nextRankXp} XP · {xpProgress}%
-                  </span>
+              <div className="absolute left-1/2 top-8 z-10 w-[40%] -translate-x-1/2">
+                <div className="text-center">
+                  <p className="mb-2 text-xs uppercase tracking-[0.35em] text-cyan-300">
+                    Shield Integrity
+                  </p>
+                  <ProgressBar value={100} />
+                  <p className="mt-1 text-xs uppercase tracking-[0.25em] text-cyan-100">
+                    100% · Systems Online
+                  </p>
                 </div>
-                <ProgressBar value={xpProgress} />
               </div>
 
-              <div>
-                <div className="mb-2 flex justify-between text-sm text-slate-300">
-                  <span>SHIELDS</span>
-                  <span>{spartan.shields}%</span>
-                </div>
-                <ProgressBar value={spartan.shields} />
-              </div>
-
-              <div>
-                <p className="text-xs uppercase tracking-[0.3em] text-cyan-400">
-                  Current Campaign
+                <div className="absolute left-8 top-6 z-10">
+                <p className="text-lg font-bold tracking-[0.2em] text-cyan-100">
+                    ALEX-225
                 </p>
-                <p className="mt-2 text-2xl font-bold">{spartan.campaign}</p>
-
-                <div className="mt-4">
-                  <div className="mb-2 flex justify-between text-sm text-slate-300">
-                    <span>CAMPAIGN PROGRESS</span>
-                    <span>{spartan.campaignProgress}%</span>
-                  </div>
-                  <ProgressBar value={spartan.campaignProgress} />
+                <p className="mt-1 text-xs uppercase tracking-[0.25em] text-cyan-400">
+                    Status: Active
+                </p>
+                <p className="mt-1 text-xs uppercase tracking-[0.25em] text-slate-300">
+                    Spartan Candidate Program
+                </p>
+                <p className="mt-1 text-xs uppercase tracking-[0.25em] text-slate-300">
+                    DAY 3/42
+                </p>
+                
                 </div>
+
+                <div className="absolute right-8 top-6 z-10 text-right">
+                    <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                        Medal Pace
+                    </p>
+                    <p className="mt-1 text-xl font-bold text-yellow-300">
+                        {medalPace}
+                    </p>
+                </div>
+
+              <div className="absolute left-8 top-32 z-10 w-[230px]">
+                <HudPanel title="Mission Objectives">
+                  <div className="space-y-1">
+                    {dailyObjectives.map(([label, xp, propertyName]) => (
+                        <HudCheckbox
+                            key={propertyName}
+                            label={label}
+                            xp={xp}
+                            propertyName={propertyName}
+                            checked={sitrepProperties[propertyName]?.checkbox ?? false}
+                        />
+                    ))}
+                  </div>
+
+                  <div className="mt-4 border border-cyan-900/60 bg-black/50 p-3">
+                    <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
+                      Daily XP Pool
+                    </p>
+                    <p className="mt-1 text-2xl font-bold text-cyan-300">
+                      {dailyXp} / {maxDailyXp}
+                    </p>
+                  </div>
+                </HudPanel>
               </div>
 
-              <section className="grid gap-4 md:grid-cols-4">
-                <StatCard label="Physical" value={spartan.readiness.physical} />
-                <StatCard label="Recovery" value={spartan.readiness.recovery} />
-                <StatCard label="Learning" value={spartan.readiness.learning} />
-                <StatCard
-                  label="Admin"
-                  value={spartan.readiness.administrative}
-                />
-              </section>
-            </div>
+              <div className="absolute right-8 top-32 z-10 w-[220px]">
+                <HudPanel title="Weekly Operations">
+                  <div className="space-y-1">
+                    {weeklyObjectives.map(([label, xp]) => (
+                      <ObjectiveRow key={label} label={label} xp={xp} />
+                    ))}
+                  </div>
 
-            <div className="space-y-6">
-              <SpartanRenderPanel />
-              <LoadoutPanel loadout={spartan.loadout} />
+                  <div className="mt-4 border border-cyan-900/60 bg-black/50 p-3">
+                    <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
+                      Weekly XP Pool
+                    </p>
+                    <p className="mt-1 text-2xl font-bold text-cyan-300">
+                      0 / 300
+                    </p>
+                  </div>
+                </HudPanel>
+              </div>
+
+              <div className="pointer-events-none absolute inset-4 border border-cyan-400/20" />
+              <div className="pointer-events-none absolute inset-0 shadow-[inset_0_0_80px_rgba(8,145,178,0.35)]" />
             </div>
           </div>
         </section>

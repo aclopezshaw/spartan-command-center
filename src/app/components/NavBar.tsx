@@ -4,10 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const tabs = [
-  { label: "Dossier", href: "/" },
+  { label: "Command HUD", href: "/" },
+  { label: "Dossier", href: "/dossier" },
   { label: "Service Record", href: "/service-record" },
   { label: "Armory", href: "/armory" },
-  { label: "Command HUD", href: "/command-hud" },
+  { label: "Promotion Board", href: "/promotion-board" },
   { label: "Campaign History", href: "/campaign-history" },
 ];
 

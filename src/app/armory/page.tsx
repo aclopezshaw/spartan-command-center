@@ -1,4 +1,5 @@
 import NavBar from "../components/NavBar";
+import PageHeader from "../components/PageHeader";
 
 export default function ArmoryPage() {
   return (
@@ -7,13 +8,7 @@ export default function ArmoryPage() {
         <NavBar />
 
         <section className="border border-cyan-600/60 bg-slate-950/90 p-6 shadow-[0_0_30px_rgba(8,145,178,0.25)]">
-          <p className="text-xs uppercase tracking-[0.4em] text-cyan-400">
-            UNSC Equipment Bay
-          </p>
-
-          <h1 className="mt-2 text-5xl font-black tracking-tight">
-            Armory
-          </h1>
+          <PageHeader eyebrow="UNSC Equipment Bay" title="Armory" />
 
           <div className="mt-6 border border-cyan-700/50 bg-black/50 p-6">
             <p className="text-xl font-bold text-cyan-100">

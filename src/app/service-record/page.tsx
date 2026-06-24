@@ -1,4 +1,5 @@
 import NavBar from "../components/NavBar";
+import PageHeader from "../components/PageHeader";
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
@@ -30,14 +31,7 @@ export default function ServiceRecordPage() {
         <NavBar />
 
         <section className="border border-cyan-600/60 bg-slate-950/90 p-6 shadow-[0_0_30px_rgba(8,145,178,0.25)]">
-          <div className="border-b border-cyan-700/50 pb-4">
-            <p className="text-xs uppercase tracking-[0.4em] text-cyan-400">
-              UNSC Personnel File
-            </p>
-            <h1 className="mt-2 text-5xl font-black tracking-tight">
-              Service Record
-            </h1>
-          </div>
+          <PageHeader eyebrow="UNSC Personnel File" title="Service Record" />
 
           <section className="mt-6 grid gap-4 md:grid-cols-4">
             <StatCard label="Current Rank" value="Recruit" />
