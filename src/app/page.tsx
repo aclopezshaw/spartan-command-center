@@ -84,9 +84,13 @@ export default async function CommandHudPage() {
   const maxDailyXp = 200;
 
   const serviceRecord = (await getAlexServiceRecord()) as any;
-
   const serviceRecordProperties = serviceRecord.properties;
+  const designation =
+    serviceRecordProperties["Designation"]?.title?.[0]?.plain_text ?? "NULL";
+  const currentCampaign = "Spartan Candidate Program";
+  const campaignDay = getNumberProperty(serviceRecordProperties, "Campaign Day");
 
+  
   const projectedCampaignXp = getNumberProperty(
     serviceRecordProperties,
     "Projected Campaign XP"
@@ -169,16 +173,16 @@ export default async function CommandHudPage() {
 
                 <div className="absolute left-8 top-6 z-10">
                 <p className="text-lg font-bold tracking-[0.2em] text-cyan-100">
-                    ALEX-225
+                    {designation}
                 </p>
                 <p className="mt-1 text-xs uppercase tracking-[0.25em] text-cyan-400">
                     Status: Active
                 </p>
                 <p className="mt-1 text-xs uppercase tracking-[0.25em] text-slate-300">
-                    Spartan Candidate Program
+                    {currentCampaign}
                 </p>
                 <p className="mt-1 text-xs uppercase tracking-[0.25em] text-slate-300">
-                    DAY 3/42
+                    DAY {campaignDay}/42
                 </p>
                 
                 </div>
