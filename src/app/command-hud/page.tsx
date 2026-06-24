@@ -71,6 +71,9 @@ function getNumberProperty(properties: any, propertyName: string) {
   return 0;
 }
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function CommandHudPage() {
   const sitrep = (await getTodaySitrep()) as any;
 

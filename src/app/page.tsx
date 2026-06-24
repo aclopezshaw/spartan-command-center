@@ -24,29 +24,6 @@ function StatCard({ label, value }: { label: string; value: number | string }) {
   );
 }
 
-/*
-function NavTabs() {
-  const tabs = ["Dossier", "Service Record", "Armory", "Command HUD", "Campaign History"];
-
-  return (
-    <nav className="flex flex-wrap gap-2 border border-cyan-700/40 bg-slate-950/70 p-2">
-      {tabs.map((tab, index) => (
-        <div
-          key={tab}
-          className={`px-4 py-2 text-xs uppercase tracking-[0.25em] ${
-            index === 0
-              ? "bg-cyan-400 text-black"
-              : "border border-cyan-700/40 text-cyan-300"
-          }`}
-        >
-          {tab}
-        </div>
-      ))}
-    </nav>
-  );
-}
-  */
-
 function SpartanRenderPanel() {
   return (
     <div className="flex min-h-[360px] flex-col justify-between border border-cyan-700/50 bg-black/70 p-5">
@@ -131,6 +108,9 @@ function getNextRankXp(xp: number) {
 
   return thresholds.find((threshold) => xp < threshold) ?? 270000;
 }
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function Home() {
   const record = await getAlexServiceRecord();

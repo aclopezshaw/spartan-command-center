@@ -20,6 +20,9 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default function ServiceRecordPage() {
   return (
     <main className="min-h-screen bg-black p-6 font-mono text-slate-100">
