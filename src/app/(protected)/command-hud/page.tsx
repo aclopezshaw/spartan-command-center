@@ -2,7 +2,7 @@ import Image from "next/image";
 import HudCheckbox from "../../components/HudCheckbox";
 import NavBar from "../../components/NavBar";
 import PageHeader from "../../components/PageHeader";
-import { getAlexServiceRecord, getTodaySitrep } from "@/lib/notion";
+import { getAlexServiceRecord, getOrCreateWeeklyOperations, getTodaySitrep, getWorkoutCountForWeek } from "@/lib/notion";
 
 function ProgressBar({ value }: { value: number }) {
   return (
@@ -72,6 +72,15 @@ function getNumberProperty(properties: any, propertyName: string) {
   return 0;
 }
 
+function getCurrentWeekStart() {
+  const now = new Date();
+  const day = now.getDay(); // Sunday = 0
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - day);
+  weekStart.setHours(0, 0, 0, 0);
+  return weekStart;
+}
+
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -90,7 +99,23 @@ export default async function CommandHudPage() {
   const currentCampaign = "Spartan Candidate Program";
   const campaignDay = getNumberProperty(serviceRecordProperties, "Campaign Day");
 
-  
+  const weekStart = getCurrentWeekStart();
+  const weeklyOps = (await getOrCreateWeeklyOperations(weekStart)) as any;
+  const weeklyProps = weeklyOps.properties;
+  const weeklyPageId = weeklyOps.id;
+  const weeklyXp = weeklyProps["Weekly XP"]?.formula?.number ?? 0;
+
+  const workoutTarget = 3;
+  const workoutsThisWeek = await getWorkoutCountForWeek(
+    weekStart
+  );
+  const workoutObjectiveComplete = workoutsThisWeek >= workoutTarget;
+  const workoutLabel = `Workouts ${Math.min(workoutsThisWeek, workoutTarget)}/${workoutTarget}`;
+  const shotComplete =
+    weeklyProps["Shot"]?.checkbox ?? false;
+  const planningComplete =
+    weeklyProps["Planning"]?.checkbox ?? false;
+
   const projectedCampaignXp = getNumberProperty(
     serviceRecordProperties,
     "Projected Campaign XP"
@@ -120,6 +145,22 @@ export default async function CommandHudPage() {
         ? "🥉 Bronze Pace"
         : "⚠ Below Bronze";
 
+    const currentHour = new Date().getHours();
+    const hudBackground =
+      currentHour >= 5 && currentHour < 8
+        ? "/images/hud-obstacle-course-5.png"
+        : currentHour >= 8 && currentHour < 11
+          ? "/images/hud-tactical-class.png"
+          : currentHour >= 11 && currentHour < 13
+            ? "/images/hud-mess-hall.png"
+            : currentHour >= 13 && currentHour < 16
+              ? "/images/hud-briefing.png"
+              : currentHour >= 16 && currentHour < 20
+                ? "/images/hud-field-exercise.png"
+                : currentHour >= 20 && currentHour < 22
+                  ? "/images/hud-night-prep.png"
+                  : "/images/hud-bedtime.png";
+
   const dailyObjectives = [
     ["Study 30 min", 35, "Study"],
     ["96oz Water", 30, "Water"],
@@ -133,9 +174,9 @@ export default async function CommandHudPage() {
   ] as const;
 
   const weeklyObjectives = [
-    ["Workout 3x", 200],
-    ["T Shot", 50],
-    ["Plan Week", 50],
+    [workoutLabel, 200, workoutObjectiveComplete],
+    ["T Shot", 50, shotComplete],
+    ["Plan Week", 50, planningComplete],
   ] as const;
 
   return (
@@ -149,8 +190,8 @@ export default async function CommandHudPage() {
           <div className="mt-6 overflow-hidden border border-cyan-600/60 bg-black shadow-[0_0_35px_rgba(8,145,178,0.25)]">
             <div className="relative min-h-[720px] overflow-hidden">
               <Image
-                src="/images/hud-mess-hall.png"
-                alt="UNSC mess hall HUD background"
+                src={hudBackground}
+                alt="UNSC Command HUD rotating background"
                 fill
                 className="object-cover"
                 priority
@@ -172,17 +213,11 @@ export default async function CommandHudPage() {
               </div>
 
                 <div className="absolute left-8 top-6 z-10">
-                <p className="text-lg font-bold tracking-[0.2em] text-cyan-100">
+                <p className="text-xl font-bold tracking-[0.2em] text-cyan-100">
                     {designation}
                 </p>
                 <p className="mt-1 text-xs uppercase tracking-[0.25em] text-cyan-400">
                     Status: Active
-                </p>
-                <p className="mt-1 text-xs uppercase tracking-[0.25em] text-slate-300">
-                    {currentCampaign}
-                </p>
-                <p className="mt-1 text-xs uppercase tracking-[0.25em] text-slate-300">
-                    DAY {campaignDay}/42
                 </p>
                 
                 </div>
@@ -224,9 +259,27 @@ export default async function CommandHudPage() {
               <div className="absolute right-8 top-32 z-10 w-[220px]">
                 <HudPanel title="Weekly Operations">
                   <div className="space-y-1">
-                    {weeklyObjectives.map(([label, xp]) => (
-                      <ObjectiveRow key={label} label={label} xp={xp} />
-                    ))}
+                    <ObjectiveRow
+                      label={workoutLabel}
+                      xp={200}
+                      checked={workoutObjectiveComplete}
+                    />
+                    <HudCheckbox
+                      label="T-Shot"
+                      xp={50}
+                      propertyName="Shot"
+                      checked={shotComplete}
+                      apiPath="/api/weekly-operations"
+                      pageId={weeklyPageId}
+                    />
+                    <HudCheckbox
+                      label="Plan Week"
+                      xp={50}
+                      propertyName="Planning"
+                      checked={planningComplete}
+                      apiPath="/api/weekly-operations"
+                      pageId={weeklyPageId}
+                    />
                   </div>
 
                   <div className="mt-4 border border-cyan-900/60 bg-black/50 p-3">
@@ -234,7 +287,7 @@ export default async function CommandHudPage() {
                       Weekly XP Pool
                     </p>
                     <p className="mt-1 text-2xl font-bold text-cyan-300">
-                      0 / 300
+                      {weeklyXp} / 300
                     </p>
                   </div>
                 </HudPanel>

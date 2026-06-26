@@ -8,11 +8,15 @@ export default function HudCheckbox({
   xp,
   propertyName,
   checked,
+  apiPath = "/api/sitrep-checkbox",
+  pageId,
 }: {
   label: string;
   xp: number;
   propertyName: string;
   checked: boolean;
+  apiPath?: string;
+  pageId?: string;
 }) {
   const router = useRouter();
   const [isChecked, setIsChecked] = useState(checked);
@@ -23,12 +27,13 @@ export default function HudCheckbox({
     setIsChecked(nextChecked);
     setIsSaving(true);
 
-    await fetch("/api/sitrep-checkbox", {
+    await fetch(apiPath, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        pageId,
         propertyName,
         checked: nextChecked,
       }),
