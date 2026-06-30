@@ -1,8 +1,10 @@
 import Image from "next/image";
 import HudCheckbox from "../../components/HudCheckbox";
+import HudPanel from "../../components/HudPanel"
 import NavBar from "../../components/NavBar";
 import PageHeader from "../../components/PageHeader";
-import { getAlexServiceRecord, getOrCreateWeeklyOperations, getTodaySitrep, getWorkoutCountForWeek } from "@/lib/notion";
+import { EventSystem } from "../../components/EventSystem";
+import { getAlexServiceRecord, getOrCreateWeeklyOperations, getTodaySitrep, getWorkoutCountForWeek, updateWeeklyOperationCheckbox } from "@/lib/notion";
 
 function ProgressBar({ value }: { value: number }) {
   return (
@@ -43,33 +45,62 @@ function ObjectiveRow({
   );
 }
 
-function HudPanel({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="border border-cyan-500/30 bg-black/15 p-4 backdrop-blur-[2px] shadow-[0_0_16px_rgba(8,145,178,0.18)]">
-      <p className="text-xs uppercase tracking-[0.3em] text-cyan-400">
-        {title}
-      </p>
-      <div className="mt-3">{children}</div>
-    </div>
-  );
-}
-
 function getNumberProperty(properties: any, propertyName: string) {
   const property = properties[propertyName];
 
   if (!property) return 0;
-
   if (property.type === "number") return property.number ?? 0;
-  if (property.type === "formula") return property.formula?.number ?? 0;
-  if (property.type === "rollup") return property.rollup?.number ?? 0;
-
+  if (property.type === "formula") {
+    if (property.formula.type === "number") {
+      return property.formula.number ?? 0;
+    }
+    return 0;
+  }
+  if (property.type === "rollup") {
+    if (property.rollup.type === "number") {
+      return property.rollup.number ?? 0;
+    }
+    if (property.rollup.type === "array") {
+      const first = property.rollup.array?.[0];
+      if (first?.type === "formula" && first.formula.type === "number") {
+        return first.formula.number ?? 0;
+      }
+      if (first?.type === "number") {
+        return first.number ?? 0;
+      }
+    }
+  }
   return 0;
+}
+
+function getTextProperty(properties: any, propertyName: string) {
+  const property = properties[propertyName];
+
+  if (!property) return "";
+  if (property.type === "rich_text") {
+    return property.rich_text?.[0]?.plain_text ?? "";
+  }
+  if (property.type === "title") {
+    return property.title?.[0]?.plain_text ?? "";
+  }
+  if (property.type === "select") {
+    return property.select?.name ?? "";
+  }
+  if (property.type === "formula") {
+    if (property.formula.type === "string") {
+      return property.formula.string ?? "";
+    }
+    if (property.formula.type === "number") {
+      return String(property.formula.number ?? "");
+    }
+    if (property.formula.type === "boolean") {
+      return property.formula.boolean ? "Yes" : "No";
+    }
+    if (property.formula.type === "date") {
+      return property.formula.date?.start ?? "";
+    }
+  }
+  return "";
 }
 
 function getCurrentWeekStart() {
@@ -96,6 +127,7 @@ export default async function CommandHudPage() {
   const serviceRecordProperties = serviceRecord.properties;
   const designation =
     serviceRecordProperties["Designation"]?.title?.[0]?.plain_text ?? "NULL";
+
   const currentCampaign = "Spartan Candidate Program";
   const campaignDay = getNumberProperty(serviceRecordProperties, "Campaign Day");
 
@@ -111,39 +143,24 @@ export default async function CommandHudPage() {
   );
   const workoutObjectiveComplete = workoutsThisWeek >= workoutTarget;
   const workoutLabel = `Workouts ${Math.min(workoutsThisWeek, workoutTarget)}/${workoutTarget}`;
+  const workoutsComplete = weeklyProps["Workouts"]?.checkbox ?? false;
+  if (workoutObjectiveComplete && !workoutsComplete) {
+    await updateWeeklyOperationCheckbox(
+      weeklyPageId,
+      "Workouts",
+      true
+    )
+  }
+  
   const shotComplete =
     weeklyProps["Shot"]?.checkbox ?? false;
   const planningComplete =
     weeklyProps["Planning"]?.checkbox ?? false;
 
-  const projectedCampaignXp = getNumberProperty(
+  const medalPace = getTextProperty(
     serviceRecordProperties,
-    "Projected Campaign XP"
-    );
-
-    const bronzeThresholdXp = getNumberProperty(
-    serviceRecordProperties,
-    "Bronze Threshold XP"
-    );
-
-    const silverThresholdXp = getNumberProperty(
-    serviceRecordProperties,
-    "Silver Threshold XP"
-    );
-
-    const goldThresholdXp = getNumberProperty(
-    serviceRecordProperties,
-    "Gold Threshold XP"
-    );
-
-    const medalPace =
-  goldThresholdXp > 0 && projectedCampaignXp >= goldThresholdXp
-    ? "🏅 Gold Pace"
-    : silverThresholdXp > 0 && projectedCampaignXp >= silverThresholdXp
-      ? "🥈 Silver Pace"
-      : bronzeThresholdXp > 0 && projectedCampaignXp >= bronzeThresholdXp
-        ? "🥉 Bronze Pace"
-        : "⚠ Below Bronze";
+    "Campaign Medal Pace"
+  );
 
     const currentHour = new Date().getHours();
     const hudBackground =
@@ -226,7 +243,7 @@ export default async function CommandHudPage() {
                     <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
                         Medal Pace
                     </p>
-                    <p className="mt-1 text-xl font-bold text-yellow-300">
+                    <p className="mt-1 text-xl font-bold text-amber-500">
                         {medalPace}
                     </p>
                 </div>
@@ -256,13 +273,17 @@ export default async function CommandHudPage() {
                 </HudPanel>
               </div>
 
-              <div className="absolute right-8 top-32 z-10 w-[220px]">
+              <div className="absolute right-8 top-32 z-10 w-[220px] flex flex-col gap-6">
+                <EventSystem campaignDay={campaignDay} />
                 <HudPanel title="Weekly Operations">
                   <div className="space-y-1">
-                    <ObjectiveRow
+                    <HudCheckbox
                       label={workoutLabel}
                       xp={200}
+                      propertyName="Workouts"
                       checked={workoutObjectiveComplete}
+                      apiPath="/api/weekly-operations"
+                      pageId={weeklyPageId}
                     />
                     <HudCheckbox
                       label="T-Shot"

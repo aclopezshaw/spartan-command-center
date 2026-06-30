@@ -1,7 +1,56 @@
+import { Client } from "@notionhq/client";
 import { getAlexServiceRecord } from "../../../lib/notion";
 import Image from "next/image";
 import NavBar from "../../components/NavBar";
 import PageHeader from "../../components/PageHeader";
+
+const notion = new Client({ auth: process.env.NOTION_TOKEN });
+
+function getNumberProperty(properties: any, propertyName: string) {
+    const property = properties[propertyName];
+
+    if (!property) return 0;
+
+    if (property.type === "number") return property.number ?? 0;
+
+    if (property.type === "formula" && property.formula.type === "number") {
+        return property.formula.number ?? 0;
+    }
+
+    if (property.type === "rollup" && property.rollup.type === "number") {
+        return property.rollup.number ?? 0;
+    }
+
+    return 0;
+}
+
+function getTitleProperty(properties: any, propertyName: string) {
+    return properties[propertyName]?.title?.[0]?.plain_text ?? "";
+}
+
+function getTextProperty(properties: any, propertyName: string) {
+    const property = properties[propertyName];
+
+    if (!property) return "";
+
+    if (property.type === "rich_text") {
+        return property.rich_text?.[0]?.plain_text ?? "";
+    }
+
+    if (property.type === "select") {
+        return property.select?.name ?? "";
+    }
+
+    if (property.type === "formula" && property.formula.type === "string") {
+        return property.formula.string ?? "";
+    }
+
+    return "";
+}
+
+function getDateProperty(properties: any, propertyName: string) {
+    return properties[propertyName]?.date?.start ?? "";
+}
 
 function ProgressBar({ value }: { value: number }) {
     return (
@@ -21,6 +70,41 @@ function StatCard({ label, value }: { label: string; value: number | string }) {
                 {label}
             </p>
             <p className="mt-3 text-3xl font-bold text-white">{value}</p>
+        </div>
+    );
+}
+
+type Achievement = {
+    title: string;
+    track: string;
+    earned: string;
+    description: string;
+    image: string;
+};
+
+function AchievementCard({ achievement }: { achievement: Achievement }) {
+    return (
+        <div className="border border-cyan-900/60 bg-slate-950/70 p-4 text-center">
+            <div className="relative mx-auto aspect-square w-full max-w-[180px]">
+                <Image
+                    src={achievement.image}
+                    alt={`${achievement.title} achievement patch`}
+                    fill
+                    className="object-contain"
+                />
+            </div>
+
+            <p className="mt-3 text-xs uppercase tracking-[0.25em] text-cyan-400">
+                {achievement.track}
+            </p>
+
+            <p className="mt-2 text-sm font-bold text-slate-200">
+                {achievement.earned}
+            </p>
+
+            <p className="mt-3 text-sm leading-relaxed text-slate-400">
+                {achievement.description}
+            </p>
         </div>
     );
 }
@@ -115,30 +199,36 @@ export const revalidate = 0;
 
 export default async function Home() {
     const record = await getAlexServiceRecord();
+    const freshRecord = await notion.pages.retrieve({
+  page_id: (record as any).id,
+});
+
+const properties = (freshRecord as any).properties;
 
     const props = (record as any).properties;
     console.log("SPARTAN:", props["Designation"]);
     console.log("SERVICE SCORE:", props["Service Score"]);
     console.log("TOTAL XP:", props["Total XP Earned"]);
 
-    const properties = (record as any).properties;
+    //const properties = (record as any).properties;
+console.log(
+  Object.keys(properties).filter((key) => key.includes("Readiness"))
+);
+    console.log("Recovery raw:", JSON.stringify(properties["Recovery Readiness"], null, 2));
+console.log("Professional raw:", JSON.stringify(properties["Professional Readiness"], null, 2));
 
     const spartan = {
         designation: properties["Designation"]?.title?.[0]?.plain_text ?? "ALEX-225",
         rank: properties["Calculated Rank"]?.formula?.string ?? "BANANA",
         xp: properties["Service Score"]?.formula?.number ?? 0,
         nextRankXp: getNextRankXp(properties["Service Score"]?.formula?.number ?? 0),
-        shields: properties["Shields"]?.number ?? 100,
-        campaign: "Spartan Candidate Program",
-        campaignProgress: Math.round((2 / 42) * 100),
-        campaignDay: 2,
-        campaignLength: 42,
         readiness: {
-            physical: properties["Physical Readiness"]?.number ?? 0,
-            recovery: properties["Recovery Readiness"]?.number ?? 0,
-            learning: properties["Learning Readiness"]?.number ?? 0,
-            administrative: properties["Administrative Readiness"]?.number ?? 0,
+            physical: getNumberProperty(properties, "Physical Readiness"),
+            recovery: getNumberProperty(properties, "Recovery Readiness"),
+            intelligence: getNumberProperty(properties, "Intelligence Readiness"),
+            professional: getNumberProperty(properties, "Professional Readiness"),
         },
+
         loadout: {
             armor: "Recruit Armor",
             patch: "Spartan Patch",
@@ -149,6 +239,64 @@ export default async function Home() {
 
     const xpProgress = Math.round((spartan.xp / spartan.nextRankXp) * 100);
     const xpToNextRank = spartan.nextRankXp - spartan.xp;
+
+    const achievementsDatabaseId = process.env.ACHIEVEMENTS_DATABASE_ID;
+
+    let achievements: Achievement[] = [];
+
+    if (achievementsDatabaseId) {
+        const achievementsResponse = await notion.dataSources.query({
+            data_source_id: achievementsDatabaseId,
+            filter: {
+                property: "Status",
+                formula: {
+                    string: {
+                    equals: "Earned",
+                    },
+                },
+            },
+            sorts: [
+                {
+                    property: "Date Earned",
+                    direction: "descending",
+                },
+            ],
+        });
+
+        achievements = achievementsResponse.results.map((page: any) => {
+            const achievementProps = page.properties;
+
+            return {
+                title: getTitleProperty(achievementProps, "Achievement Name"),
+                track: getTextProperty(achievementProps, "Track"),
+                earned: getDateProperty(achievementProps, "Date Earned"),
+                description: getTextProperty(achievementProps, "Description"),
+                image: getTextProperty(achievementProps, "Patch Path"),
+                physicalPoints: getNumberProperty(achievementProps, "Physical Point"),
+                recoveryPoints: getNumberProperty(achievementProps, "Recovery Point"),
+                intelligencePoints: getNumberProperty(achievementProps, "Intelligence Point"),
+                professionalPoints: getNumberProperty(achievementProps, "Professional Point")
+            };
+        });
+    }
+
+    const readinessTotals = achievements.reduce(
+    (totals, achievement: any) => ({
+        physical: totals.physical + (achievement.physicalPoints ?? 0),
+        recovery: totals.recovery + (achievement.recoveryPoints ?? 0),
+        intelligence: totals.intelligence + (achievement.intelligencePoints ?? 0),
+        professional: totals.professional + (achievement.professionalPoints ?? 0),
+    }),
+    {
+        physical: 0,
+        recovery: 0,
+        intelligence: 0,
+        professional: 0,
+    }
+);
+spartan.readiness = readinessTotals;
+
+console.log("Computed totals:", readinessTotals);
 
     return (
         <main className="min-h-screen bg-black p-6 font-mono text-slate-100">
@@ -196,33 +344,9 @@ export default async function Home() {
                                 <section className="grid gap-4 md:grid-cols-4">
                                     <StatCard label="Physical" value={spartan.readiness.physical} />
                                     <StatCard label="Recovery" value={spartan.readiness.recovery} />
-                                    <StatCard label="Intelligence" value={spartan.readiness.learning} />
-                                    <StatCard label="Leadership" value={spartan.readiness.administrative} />
+                                    <StatCard label="Intelligence" value={spartan.readiness.intelligence} />
+                                    <StatCard label="Professional" value={spartan.readiness.professional} />
                                 </section>
-                            </div>
-
-                            <div className="border border-cyan-700/50 bg-black/60 p-5">
-                                <p className="text-xs uppercase tracking-[0.3em] text-cyan-400">
-                                    Current Campaign
-                                </p>
-
-                                <div className="mt-3 flex items-end justify-between gap-4">
-                                    <p className="text-2xl font-bold text-cyan-100">
-                                        Spartan Candidate Program
-                                    </p>
-
-                                    <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
-                                        Active
-                                    </p>
-                                </div>
-
-                                <div className="mt-5">
-                                    <div className="mb-2 flex justify-between text-xs uppercase text-slate-300">
-                                        <span>Campaign Progress</span>
-                                        <span>5%</span>
-                                    </div>
-                                    <ProgressBar value={spartan.campaignProgress} />
-                                </div>
                             </div>
 
                             <div className="border border-cyan-700/50 bg-black/60 p-5">
@@ -230,24 +354,14 @@ export default async function Home() {
                                     Awards Cabinet
                                 </p>
 
-                                <div className="mt-5 grid gap-4 md:grid-cols-2">
-                                    {[
-                                        ["Bronze Readiness Medal", "Locked"],
-                                        ["Silver Readiness Medal", "Locked"],
-                                        ["Gold Readiness Medal", "Locked"],
-                                        ["Distinguished Consistency Ribbon", "Locked"],
-                                    ].map(([award, status]) => (
-                                        <div
-                                            key={award}
-                                            className="flex min-h-32 flex-col items-center justify-center border border-cyan-900/60 bg-slate-950/70 p-4 text-center"
-                                        >
-                                            <div className="mb-3 h-14 w-14 rounded-full border border-slate-700 bg-black/60" />
-                                            <p className="text-sm font-bold text-cyan-100">{award}</p>
-                                            <p className="mt-2 text-xs uppercase tracking-[0.25em] text-slate-500">
-                                                {status}
-                                            </p>
-                                        </div>
+                                <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                    {achievements.map((achievement) => (
+                                        <AchievementCard
+                                            key={achievement.title}
+                                            achievement={achievement}
+                                        />
                                     ))}
+                                    
                                 </div>
                             </div>
                         </div>

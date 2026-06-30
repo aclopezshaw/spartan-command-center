@@ -5,14 +5,14 @@ export const notion = new Client({
 });
 
 export async function getAlexServiceRecord() {
-  const databaseId = process.env.SERVICE_RECORD_DATABASE_ID;
+  const dataSourceId = process.env.SERVICE_RECORD_DATA_SOURCE_ID;
 
-  if (!databaseId) {
-    throw new Error("Missing SERVICE_RECORD_DATABASE_ID");
+  if (!dataSourceId) {
+    throw new Error("Missing SERVICE_RECORD_DATA_SOURCE_ID");
   }
 
   const response = await notion.dataSources.query({
-  data_source_id: databaseId,
+  data_source_id: dataSourceId,
   filter: {
     property: "Designation",
     title: {
