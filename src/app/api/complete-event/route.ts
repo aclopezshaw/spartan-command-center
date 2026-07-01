@@ -6,12 +6,12 @@ const notion = new Client({
 });
 
 async function findServiceRecordPageId() {
-  const databaseId = process.env.SERVICE_RECORD_DATABASE_ID;
+  const dataSourceId = process.env.SERVICE_RECORD_DATA_SOURCE_ID;
 
-  if (!databaseId) return null;
+  if (!dataSourceId) return null;
 
   const response = await notion.dataSources.query({
-    data_source_id: databaseId,
+    data_source_id: dataSourceId,
     page_size: 1,
   });
 
@@ -19,12 +19,12 @@ async function findServiceRecordPageId() {
 }
 
 async function findEventPageId(eventId: string) {
-  const databaseId = process.env.EVENTS_DATABASE_ID;
+  const dataSourceId = process.env.EVENTS_DATA_SOURCE_ID;
 
-  if (!databaseId) return null;
+  if (!dataSourceId) return null;
 
   const response = await notion.dataSources.query({
-    data_source_id: databaseId,
+    data_source_id: dataSourceId,
     filter: {
       property: "Event ID",
       rich_text: {

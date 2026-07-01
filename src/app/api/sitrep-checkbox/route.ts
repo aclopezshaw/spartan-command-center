@@ -3,6 +3,7 @@ import {
   getTodaySitrep,
   updateDailySitrepCheckbox,
 } from "@/lib/notion";
+import { evaluateAchievements } from "@/lib/achievements";
 
 export async function POST(request: Request) {
   const body = await request.json();
@@ -26,5 +27,14 @@ export async function POST(request: Request) {
 
   await updateDailySitrepCheckbox(todaySitrep.id, propertyName, checked);
 
-  return NextResponse.json({ success: true });
+  let awarded: string[] = [];
+
+  if (checked) {
+    awarded = await evaluateAchievements();
+  }
+
+  return NextResponse.json({
+    success: true,
+    awarded,
+  });
 }

@@ -129,7 +129,25 @@ export default async function CommandHudPage() {
     serviceRecordProperties["Designation"]?.title?.[0]?.plain_text ?? "NULL";
 
   const currentCampaign = "Spartan Candidate Program";
-  const campaignDay = getNumberProperty(serviceRecordProperties, "Campaign Day");
+  const campaignStart = "2026-06-21";
+
+  function toNoonUtc(dateString: string) {
+    return new Date(`${dateString}T12:00:00.000Z`);
+  }
+
+  const denverToday = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Denver",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+
+  const campaignDay =
+    Math.floor(
+      (toNoonUtc(denverToday).getTime() -
+        toNoonUtc(campaignStart).getTime()) /
+        86400000
+    ) + 1;
 
   const weekStart = getCurrentWeekStart();
   const weeklyOps = (await getOrCreateWeeklyOperations(weekStart)) as any;
@@ -195,6 +213,12 @@ export default async function CommandHudPage() {
     ["T Shot", 50, shotComplete],
     ["Plan Week", 50, planningComplete],
   ] as const;
+
+  console.log("COMMAND HUD campaignDay:", campaignDay);
+
+  console.log("Local date:", new Date().toString());
+
+  console.log("ISO date:", new Date().toISOString());
 
   return (
     <main className="min-h-screen bg-black p-6 font-mono text-slate-100">
