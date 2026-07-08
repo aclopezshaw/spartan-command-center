@@ -10,6 +10,7 @@ const STORAGE_KEY = "spartan-completed-events";
 export function EventSystem({ campaignDay }: { campaignDay: number }) {
   const [completedEventIds, setCompletedEventIds] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [reviewingEventId, setReviewingEventId] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -66,15 +67,55 @@ export function EventSystem({ campaignDay }: { campaignDay: number }) {
 
   return (
     <>
-      {!activeEvent && nextEvent && (
-        <NextEventPanel event={nextEvent} campaignDay={campaignDay} />
+      {activeEvent?.backgroundImage && (
+        <div
+          className="pointer-events-none absolute inset-0 z-[5] bg-cover bg-center opacity-80"
+          style={{ backgroundImage: `url(${activeEvent.backgroundImage})` }}
+        />
       )}
 
       {activeEvent && (
-        <EventOverlay
-          event={activeEvent}
-          onComplete={() => completeEvent(activeEvent.id)}
-        />
+        <div className="absolute right-8 top-32 z-20 w-[220px]">
+          <NextEventPanel
+            event={activeEvent}
+            campaignDay={campaignDay}
+            isActive
+            onReview={() => setReviewingEventId(activeEvent.id)}
+          />
+        </div>
+      )}
+
+      {activeEvent && reviewingEventId === activeEvent.id && (
+        <div className="absolute left-1/2 top-1/2 z-30 w-[420px] -translate-x-1/2 -translate-y-1/2 border border-cyan-400 bg-black/90 p-6 text-xs text-slate-200 shadow-[0_0_35px_rgba(34,211,238,0.45)]">
+          <p className="font-bold uppercase tracking-[0.25em] text-cyan-300">
+            Event Review
+          </p>
+
+          <p className="mt-3 text-lg font-bold uppercase text-slate-100">
+            {activeEvent.title}
+          </p>
+
+          <p className="mt-3 font-bold text-slate-100">
+            Requirement: Physical Readiness ≥ 1
+          </p>
+
+          <p className="mt-2 text-slate-400">
+            Confirm Physical Readiness status in Service Record.
+          </p>
+
+          <button
+            onClick={() => completeEvent(activeEvent.id)}
+            className="mt-4 w-full border border-emerald-400 bg-emerald-500/10 py-2 font-bold uppercase tracking-[0.2em] text-emerald-300 hover:bg-emerald-500/20"
+          >
+            Mark Event Complete
+          </button>
+        </div>
+      )}
+
+      {!activeEvent && nextEvent && (
+        <div className="absolute right-8 top-32 z-20 w-[220px]">
+          <NextEventPanel event={nextEvent} campaignDay={campaignDay} />
+        </div>
       )}
     </>
   );

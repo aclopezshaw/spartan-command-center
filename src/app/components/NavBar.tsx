@@ -11,6 +11,7 @@ const tabs = [
   { label: "Campaign History", href: "/campaign-history" },
   { label: "Intel Reports", href: "/intel-reports" },
   { label: "Training Reports", href: "/training-reports" },
+  { label: "Medical Unit", href: "/medical-unit" },
 ];
 
 export default function NavBar() {

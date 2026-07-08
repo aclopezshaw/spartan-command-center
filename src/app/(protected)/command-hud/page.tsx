@@ -297,8 +297,9 @@ export default async function CommandHudPage() {
                 </HudPanel>
               </div>
 
-              <div className="absolute right-8 top-32 z-10 w-[220px] flex flex-col gap-6">
-                <EventSystem campaignDay={campaignDay} />
+              <EventSystem campaignDay={campaignDay} />
+
+              <div className="absolute right-8 top-[420px] z-10 w-[220px] flex flex-col gap-6">
                 <HudPanel title="Weekly Operations">
                   <div className="space-y-1">
                     <HudCheckbox
