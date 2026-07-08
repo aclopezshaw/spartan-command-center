@@ -1,5 +1,62 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import NavBar from "../../components/NavBar";
 import PageHeader from "../../components/PageHeader";
+
+type OrderItem = {
+    id: string;
+    title: string;
+    course: string;
+    dueDate: string | null;
+    priority: string;
+    status: string;
+    focusQueue: boolean;
+};
+
+type OrdersResponse = {
+    focusQueue: OrderItem[];
+    dueSoon: OrderItem[];
+    overdue: OrderItem[];
+};
+
+type PipelineCourse = {
+    course: string;
+    name: string;
+    weekProgress: number;
+    quarterProgress: number;
+    weekComplete: number;
+    weekTotal: number;
+    quarterComplete: number;
+    quarterTotal: number;
+    next: string;
+};
+
+type PipelineResponse = {
+    pipeline: PipelineCourse[];
+};
+
+function formatDueDate(date: string | null) {
+    if (!date) return "NO DUE";
+
+    return new Date(date)
+        .toLocaleDateString("en-US", {
+            month: "short",
+            day: "2-digit",
+        })
+        .toUpperCase();
+}
+
+function getCourseName(courseCode: string) {
+    const courseNames: Record<string, string> = {
+        "GPS 2100": "Galen Pathway to Success",
+        "BIO 2100": "Microbiology",
+        "SOC 1305": "Introduction to Sociology",
+        "AID 1080": "AI and Digital Literacy",
+    };
+
+    return courseNames[courseCode] ?? courseCode;
+}
 
 function Panel({
     title,
@@ -35,12 +92,20 @@ function CourseRow({
     weekProgress,
     quarterProgress,
     next,
+    weekComplete,
+    weekTotal,
+    quarterComplete,
+    quarterTotal,
 }: {
     code: string;
     name: string;
     weekProgress: number;
     quarterProgress: number;
     next: string;
+    weekComplete: number;
+    weekTotal: number;
+    quarterComplete: number;
+    quarterTotal: number;
 }) {
     return (
         <div className="border-b border-cyan-900/60 pb-4 last:border-b-0 last:pb-0">
@@ -58,7 +123,7 @@ function CourseRow({
                 <div>
                     <div className="mb-1 flex justify-between text-xs uppercase tracking-[0.2em] text-slate-500">
                         <span>This Week</span>
-                        <span>{weekProgress}%</span>
+                        <span>{weekComplete} / {weekTotal}</span>
                     </div>
                     <ProgressBar value={weekProgress} />
                 </div>
@@ -66,7 +131,7 @@ function CourseRow({
                 <div>
                     <div className="mb-1 flex justify-between text-xs uppercase tracking-[0.2em] text-slate-500">
                         <span>Quarter</span>
-                        <span>{quarterProgress}%</span>
+                        <span>{quarterComplete} / {quarterTotal}</span>
                     </div>
                     <ProgressBar value={quarterProgress} />
                 </div>
@@ -98,24 +163,35 @@ function OrderColumn({
 }
 
 function AssignmentItem({
+    id,
     title,
     meta,
-    urgency,
+    priority,
+    onComplete,
 }: {
+    id: string;
     title: string;
     meta: string;
-    urgency: "critical" | "high" | "normal";
+    priority: string;
+    onComplete: (id: string) => void;
 }) {
     const color =
-        urgency === "critical"
+        priority?.toLowerCase() === "critical"
             ? "text-red-400"
-            : urgency === "high"
-              ? "text-amber-400"
-              : "text-cyan-300";
+            : priority?.toLowerCase() === "high"
+            ? "text-amber-400"
+            : priority?.toLowerCase() === "medium"
+            ? "text-yellow-300"
+            : "text-cyan-300";
 
     return (
         <div className="flex gap-3 border-b border-cyan-900/60 pb-3 last:border-b-0 last:pb-0">
-            <div className="mt-1 h-4 w-4 shrink-0 border border-cyan-500 bg-slate-950 shadow-[0_0_8px_rgba(34,211,238,0.35)]" />
+            <button
+                type="button"
+                onClick={() => onComplete(id)}
+                className="mt-1 h-5 w-5 shrink-0 border border-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.7)]"
+            />
+
             <div>
                 <p className={`text-sm font-bold ${color}`}>{title}</p>
                 <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">
@@ -137,10 +213,62 @@ function StatBlock({ label, value }: { label: string; value: string }) {
     );
 }
 
+function getPriorityColor(priority: string) {
+    switch (priority.toLowerCase()) {
+        case "critical":
+            return "text-red-400";
+        case "high":
+            return "text-amber-400";
+        case "medium":
+            return "text-yellow-300";
+        case "low":
+        default:
+            return "text-cyan-300";
+    }
+}
+
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
+//export const revalidate = 0;
 
 export default function MedicalUnitPage() {
+    const [orders, setOrders] = useState<OrdersResponse>({
+        focusQueue: [],
+        dueSoon: [],
+        overdue: [],
+    });
+    const [pipeline, setPipeline] = useState<PipelineCourse[]>([]);
+
+    async function loadOrders() {
+        const response = await fetch("/api/smu/orders");
+        const data = await response.json();
+        setOrders(data);
+    }
+
+    async function loadPipeline() {
+        const response = await fetch("/api/smu/pipeline");
+        const data: PipelineResponse = await response.json();
+        setPipeline(data.pipeline);
+    }
+
+    useEffect(() => {
+        loadOrders();
+        loadPipeline();
+    }, []);
+
+    async function completeAssignment(id: string) {
+        console.log("Completing assignment:", id);
+
+        await fetch("/api/smu/orders/complete", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ id }),
+        });
+
+        await loadOrders();
+    }
+
     return (
         <main className="min-h-screen bg-black p-6 font-mono text-slate-100">
             <div className="mx-auto max-w-7xl space-y-6">
@@ -199,67 +327,80 @@ export default function MedicalUnitPage() {
                         <div className="space-y-6">
                             <Panel title="Active Training Pipeline">
                                 <div className="space-y-4">
-                                    <CourseRow
-                                        code="NURS 210"
-                                        name="Fundamentals of Nursing"
-                                        weekProgress={82}
-                                        quarterProgress={82}
-                                        next="Next: Quiz Jul 03"
-                                    />
-                                    <CourseRow
-                                        code="BIO 201"
-                                        name="Anatomy & Physiology"
-                                        weekProgress={91}
-                                        quarterProgress={91}
-                                        next="Next: Lab Jul 05"
-                                    />
-                                    <CourseRow
-                                        code="MATH 134"
-                                        name="Statistics for Healthcare"
-                                        weekProgress={61}
-                                        quarterProgress={61}
-                                        next="Next: HW Jul 04"
-                                    />
-                                    <CourseRow
-                                        code="ENG 121"
-                                        name="Composition"
-                                        weekProgress={74}
-                                        quarterProgress={74}
-                                        next="Next: Essay Jul 07"
-                                    />
+                                    {pipeline.map((course) => (
+                                        <CourseRow
+                                            key={course.course}
+                                            code={course.course}
+                                            name={getCourseName(course.course)}
+                                            weekProgress={course.weekProgress}
+                                            quarterProgress={course.quarterProgress}
+                                            weekComplete={course.weekComplete}
+                                            weekTotal={course.weekTotal}
+                                            quarterComplete={course.quarterComplete}
+                                            quarterTotal={course.quarterTotal}
+                                            next={course.next}
+                                        />
+                                    ))}
                                 </div>
                             </Panel>
 
                             <Panel title="Today's Orders">
                                 <div className="grid gap-4 lg:grid-cols-3">
-                                    <OrderColumn title="Focus Queue" count={2}>
-                                        <AssignmentItem
-                                            title="Dosage Calculation Quiz"
-                                            meta="NURS 210 · Due Jul 03 · Critical"
-                                            urgency="critical"
-                                        />
-                                        <AssignmentItem
-                                            title="Clinical Reflection"
-                                            meta="NURS 210 · Due Jul 05 · High"
-                                            urgency="high"
-                                        />
+                                    <OrderColumn title="Focus Queue" count={orders.focusQueue.length}>
+                                        {orders.focusQueue.length > 0 ? (
+                                            orders.focusQueue.map((item) => (
+                                                <AssignmentItem
+                                                    key={item.id}
+                                                    title={item.title}
+                                                    meta={`${item.course} • ${formatDueDate(item.dueDate)}`}
+                                                    id={item.id}
+                                                    priority={item.priority}
+                                                    onComplete={completeAssignment}
+                                                />
+                                            ))
+                                        ) : (
+                                            <p className="text-sm uppercase tracking-[0.2em] text-slate-500">
+                                                ✓ Clear
+                                            </p>
+                                        )}
                                     </OrderColumn>
 
-                                    <OrderColumn title="Due Soon" count={2}>
-                                        <AssignmentItem
-                                            title="Discussion Board"
-                                            meta="BIO 201 · Due Jul 06 · High"
-                                            urgency="high"
-                                        />
-                                        <AssignmentItem
-                                            title="Reading Assignment"
-                                            meta="ENG 121 · Due Jul 09 · Normal"
-                                            urgency="normal"
-                                        />
+                                    <OrderColumn title="Due Soon" count={orders.dueSoon.length}>
+                                        {orders.dueSoon.length > 0 ? (
+                                            orders.dueSoon.map((item) => (
+                                                <AssignmentItem
+                                                    key={item.id}
+                                                    title={item.title}
+                                                    meta={`${item.course} • ${formatDueDate(item.dueDate)}`}
+                                                    id={item.id}
+                                                    priority={item.priority}
+                                                    onComplete={completeAssignment}
+                                                />
+                                            ))
+                                        ) : (
+                                            <p className="text-sm uppercase tracking-[0.2em] text-slate-500">
+                                                ✓ Clear
+                                            </p>
+                                        )}
                                     </OrderColumn>
 
-                                    <OrderColumn title="Overdue" count={0}>
-                                        <p className="text-sm text-slate-500">Clear.</p>
+                                    <OrderColumn title="Overdue" count={orders.overdue.length}>
+                                        {orders.overdue.length > 0 ? (
+                                            orders.overdue.map((item) => (
+                                                <AssignmentItem
+                                                    key={item.id}
+                                                    title={item.title}
+                                                    meta={`${item.course} • ${formatDueDate(item.dueDate)}`}
+                                                    id={item.id}
+                                                    priority={item.priority}
+                                                    onComplete={completeAssignment}                                             
+                                                />
+                                            ))
+                                        ) : (
+                                            <p className="text-sm uppercase tracking-[0.2em] text-slate-500">
+                                                ✓ Clear
+                                            </p>
+                                        )}
                                     </OrderColumn>
                                 </div>
                             </Panel>

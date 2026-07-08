@@ -47,8 +47,7 @@ async function normalizeAssignment(page: any): Promise<OrderItem> {
         id: page.id,
         title: getTitle(properties),
         course:
-            getSelectName(properties.Course) ||
-            (await getRelationTitle(properties.Course)) ||
+            getSelectName(properties["Course Code"]) ||
             "Unassigned",
         dueDate: getDueDate(properties),
         priority:
@@ -83,6 +82,19 @@ function isDueSoon(item: OrderItem, today: Date) {
     return due >= today && due <= soon;
 }
 
+function getSelect(property: any) {
+    return property?.select?.name ?? "";
+}
+
+function getRollupText(property: any) {
+    return (
+        property?.rollup?.array?.[0]?.title?.[0]?.plain_text ??
+        property?.rollup?.array?.[0]?.rich_text?.[0]?.plain_text ??
+        property?.rollup?.array?.[0]?.name ??
+        ""
+    );
+}
+
 async function getRelationTitle(property: any) {
     const relationId = property?.relation?.[0]?.id;
 
@@ -98,9 +110,6 @@ async function getRelationTitle(property: any) {
         properties.Course ??
         properties.Class;
 
-    console.log("Relation ID:", relationId);
-    console.log("Course title property:", properties["Course Name"]);
-
     return titleProperty?.title?.[0]?.plain_text ?? "";
 }
 
@@ -112,33 +121,127 @@ export async function GET() {
             throw new Error("Missing ASSIGNMENTS_DATA_SOURCE_ID");
         }
 
-        const response = await notion.dataSources.query({
+        const now = new Date();
+        const todayStart = new Date(now);
+        todayStart.setHours(0, 0, 0, 0);
+
+        const dueSoonEnd = new Date(todayStart);
+        dueSoonEnd.setDate(dueSoonEnd.getDate() + 3);
+        dueSoonEnd.setHours(23, 59, 59, 999);
+
+        const focusResponse = await notion.dataSources.query({
             data_source_id: databaseId,
             filter: {
-                property: "Focus",
-                checkbox: {
-                    equals: true,
-                },
+                and: [
+                    {
+                        property: "Focus",
+                        checkbox: {
+                            equals: true,
+                        },
+                    },
+                    {
+                        property: "Status",
+                        select: {
+                            does_not_equal: "Complete",
+                        },
+                    },
+                ],
             },
             page_size: 100,
         });
 
-        const assignments = await Promise.all(response.results.map(normalizeAssignment));
+        const dueSoonResponse = await notion.dataSources.query({
+            data_source_id: databaseId,
+            filter: {
+                and: [
+                    {
+                        property: "Due Date",
+                        date: {
+                            on_or_after: todayStart.toISOString(),
+                        },
+                    },
+                    {
+                        property: "Due Date",
+                        date: {
+                            on_or_before: dueSoonEnd.toISOString(),
+                        },
+                    },
+                    {
+                        property: "Focus",
+                        checkbox: {
+                            equals: false,
+                        },
+                    },
+                    {
+                        property: "Status",
+                        select: {
+                            does_not_equal: "Complete",
+                        },
+                    },
+                ],
+            },
+            page_size: 100,
+        });
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const overdueResponse = await notion.dataSources.query({
+            data_source_id: databaseId,
+            filter: {
+                and: [
+                    {
+                        property: "Due Date",
+                        date: {
+                            before: todayStart.toISOString(),
+                        },
+                    },
+                    {
+                        property: "Status",
+                        select: {
+                            does_not_equal: "Complete",
+                        },
+                    },
+                ],
+            },
+            page_size: 100,
+        });
 
-        const focusQueue = assignments.filter(
-            (item) => item.focusQueue && !isComplete(item)
+        const focusQueue = await Promise.all(
+            focusResponse.results.map(normalizeAssignment)
         );
+        focusQueue.sort((a, b) => {
+            if (!a.dueDate) return 1;
+            if (!b.dueDate) return -1;
 
-        const overdue = assignments.filter((item) =>
-            isOverdue(item, today)
-        );
+            return (
+                new Date(a.dueDate).getTime() -
+                new Date(b.dueDate).getTime()
+            );
+        });
 
-        const dueSoon = assignments.filter((item) =>
-            isDueSoon(item, today)
+        const dueSoon = await Promise.all(
+            dueSoonResponse.results.map(normalizeAssignment)
         );
+        dueSoon.sort((a, b) => {
+            if (!a.dueDate) return 1;
+            if (!b.dueDate) return -1;
+
+            return (
+                new Date(a.dueDate).getTime() -
+                new Date(b.dueDate).getTime()
+            );
+        });
+
+        const overdue = await Promise.all(
+            overdueResponse.results.map(normalizeAssignment)
+        );
+        overdue.sort((a, b) => {
+            if (!a.dueDate) return 1;
+            if (!b.dueDate) return -1;
+
+            return (
+                new Date(a.dueDate).getTime() -
+                new Date(b.dueDate).getTime()
+            );
+        });
 
         return NextResponse.json({
             focusQueue,
