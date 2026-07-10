@@ -2,11 +2,15 @@ import { NextResponse } from "next/server";
 import { Client } from "@notionhq/client";
 
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 type Assignment = {
     course: string;
     status: string;
     dueDate: string | null;
+    id: string;
+    title: string;
 };
 
 function getSelectName(property: any) {
@@ -17,13 +21,26 @@ function getDueDate(properties: any) {
     return properties["Due Date"]?.date?.start ?? null;
 }
 
+function normalizeCourse(course: string) {
+  const cleaned = course.trim().toUpperCase();
+
+  if (cleaned.includes("AID")) return "AID 1080";
+  if (cleaned.includes("BIO")) return "BIO 2100";
+  if (cleaned.includes("GPS")) return "GPS 2100";
+  if (cleaned.includes("SOC")) return "SOC 1305";
+
+  return cleaned;
+}
+
 function normalizeAssignment(page: any): Assignment {
     const properties = page.properties;
 
     return {
-        course: getSelectName(properties["Course Code"]) || "Unassigned",
+        course: normalizeCourse(getSelectName(properties["Course Code"]) || "Unassigned"),
         status: getSelectName(properties.Status) || "Not Started",
         dueDate: getDueDate(properties),
+        id: page.id,
+        title: properties.Assignment?.title?.[0]?.plain_text ?? "Untitled",
     };
 }
 
@@ -55,6 +72,27 @@ function percent(completed: number, total: number) {
     return Math.round((completed / total) * 100);
 }
 
+async function getAllAssignments(dataSourceId: string) {
+  const results: any[] = [];
+  let cursor: string | undefined = undefined;
+
+  do {
+    const response = await notion.dataSources.query({
+      data_source_id: dataSourceId,
+      page_size: 100,
+      start_cursor: cursor,
+    });
+
+    results.push(...response.results);
+
+    cursor = response.has_more
+      ? response.next_cursor ?? undefined
+      : undefined;
+  } while (cursor);
+
+  return results;
+}
+
 export async function GET() {
     try {
         const dataSourceId = process.env.ASSIGNMENTS_DATA_SOURCE_ID;
@@ -63,12 +101,8 @@ export async function GET() {
             throw new Error("Missing ASSIGNMENTS_DATA_SOURCE_ID");
         }
 
-        const response = await notion.dataSources.query({
-            data_source_id: dataSourceId,
-            page_size: 100,
-        });
-
-        const assignments = response.results.map(normalizeAssignment);
+        const pages = await getAllAssignments(dataSourceId);
+        const assignments = pages.map(normalizeAssignment);
 
         const { start, end } = getWeekRange();
 

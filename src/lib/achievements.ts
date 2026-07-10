@@ -182,7 +182,6 @@ export async function evaluateAchievements() {
   const awarded: string[] = [];
 
   for (const rawAchievement of achievements) {
-    //console.log(mapAchievement(rawAchievement));
     const achievement = mapAchievement(rawAchievement);
 
     if (!achievement.objective || !achievement.track || !achievement.reqValue) {
@@ -194,13 +193,6 @@ export async function evaluateAchievements() {
     }
 
     const stats = await getObjectiveStats(achievement.objective);
-    console.log("Achievement check:", {
-  name: achievement.name,
-  objective: achievement.objective,
-  track: achievement.track,
-  reqValue: achievement.reqValue,
-  stats,
-});
 
     if (isAchievementEarned(achievement, stats)) {
       await awardAchievement(achievement.id, today);

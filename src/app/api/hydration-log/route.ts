@@ -83,8 +83,6 @@ async function checkWaterObjectiveIfComplete() {
 
   const sitrepPageId = await getTodaySitrepPageId();
 
-  console.log("Today SITREP page ID:", sitrepPageId);
-
   if (!sitrepPageId) return;
 
   await notion.pages.update({

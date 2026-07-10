@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { Client } from "@notionhq/client";
 
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 type OrderItem = {
     id: string;
@@ -11,6 +13,7 @@ type OrderItem = {
     priority: string;
     status: string;
     focusQueue: boolean;
+    estimatedMinutes: number;
 };
 
 function getTitle(properties: any) {
@@ -56,6 +59,10 @@ async function normalizeAssignment(page: any): Promise<OrderItem> {
             "Normal",
         status: getSelectName(properties.Status) || "Not Started",
         focusQueue: getCheckbox(properties.Focus),
+        estimatedMinutes: getNumberProperty(
+            properties,
+            "Est. Time"
+        ),
     };
 }
 
@@ -63,13 +70,21 @@ function isComplete(item: OrderItem) {
     return ["Done", "Complete", "Completed"].includes(item.status);
 }
 
+function toDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
 function isOverdue(item: OrderItem, today: Date) {
-    if (!item.dueDate || isComplete(item)) return false;
+  if (!item.dueDate) return false;
 
-    const due = new Date(item.dueDate);
-    due.setHours(23, 59, 59, 999);
+  const dueDateOnly = item.dueDate.split("T")[0];
+  const todayDateOnly = toDateKey(today);
 
-    return due < today;
+  return dueDateOnly < todayDateOnly && !isComplete(item);
 }
 
 function isDueSoon(item: OrderItem, today: Date) {
@@ -80,6 +95,32 @@ function isDueSoon(item: OrderItem, today: Date) {
     soon.setDate(soon.getDate() + 3);
 
     return due >= today && due <= soon;
+}
+
+function getNumberProperty(properties: any, propertyName: string) {
+  const property = properties[propertyName];
+
+  if (!property) return 0;
+
+  if (property.type === "number") {
+    return property.number ?? 0;
+  }
+
+  if (
+    property.type === "formula" &&
+    property.formula.type === "number"
+  ) {
+    return property.formula.number ?? 0;
+  }
+
+  if (
+    property.type === "rollup" &&
+    property.rollup.type === "number"
+  ) {
+    return property.rollup.number ?? 0;
+  }
+
+  return 0;
 }
 
 function getSelect(property: any) {
@@ -243,10 +284,86 @@ export async function GET() {
             );
         });
 
+        const priorityWeight = (priority: string) => {
+            switch (priority.toLowerCase()) {
+                case "critical":
+                return 3;
+                case "high":
+                return 2;
+                default:
+                return 1;
+            }
+            };
+
+        const nextCriticalResponse = await notion.dataSources.query({
+            data_source_id: databaseId,
+            filter: {
+                and: [
+                {
+                    property: "Status",
+                    select: {
+                    does_not_equal: "Complete",
+                    },
+                },
+                {
+                    or: [
+                    {
+                        property: "Priority",
+                        select: {
+                        equals: "High",
+                        },
+                    },
+                    {
+                        property: "Est. Time",
+                        number: {
+                        greater_than_or_equal_to: 60,
+                        },
+                    },
+                    ],
+                },
+                ],
+            },
+            page_size: 100,
+        });
+
+        const nextCritical = await Promise.all(
+            nextCriticalResponse.results.map(normalizeAssignment)
+        );
+
+        nextCritical.sort((a, b) => {
+            if (!a.dueDate) return 1;
+            if (!b.dueDate) return -1;
+
+            return (
+                new Date(a.dueDate).getTime() -
+                new Date(b.dueDate).getTime()
+            );
+        });
+
+        const focusQueueIds = new Set(
+            focusQueue.map((item) => item.id)
+        );
+
+        const dedupedDueSoon = dueSoon.filter(
+            (item) => !focusQueueIds.has(item.id)
+        );
+
+        const dueSoonIds = new Set(
+            dedupedDueSoon.map((item) => item.id)
+        );
+
+        const dedupedNextCritical = nextCritical
+            .filter(
+                (item) =>
+                !focusQueueIds.has(item.id) &&
+                !dueSoonIds.has(item.id)
+        )
+        .slice(0, 5);
+
         return NextResponse.json({
             focusQueue,
-            dueSoon,
-            overdue,
+            dueSoon: dedupedDueSoon,
+            nextCritical: dedupedNextCritical,
         });
     } catch (error) {
         console.error(error);

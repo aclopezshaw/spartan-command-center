@@ -94,6 +94,10 @@ function AchievementCard({ achievement }: { achievement: Achievement }) {
                 />
             </div>
 
+            <p className="mt-4 text-sm font-black uppercase tracking-[0.2em] text-cyan-100">
+                {achievement.title}
+            </p>
+
             <p className="mt-3 text-xs uppercase tracking-[0.25em] text-cyan-400">
                 {achievement.track}
             </p>
@@ -206,16 +210,6 @@ export default async function Home() {
 const properties = (freshRecord as any).properties;
 
     const props = (record as any).properties;
-    console.log("SPARTAN:", props["Designation"]);
-    console.log("SERVICE SCORE:", props["Service Score"]);
-    console.log("TOTAL XP:", props["Total XP Earned"]);
-
-    //const properties = (record as any).properties;
-console.log(
-  Object.keys(properties).filter((key) => key.includes("Readiness"))
-);
-    console.log("Recovery raw:", JSON.stringify(properties["Recovery Readiness"], null, 2));
-console.log("Professional raw:", JSON.stringify(properties["Professional Readiness"], null, 2));
 
     const spartan = {
         designation: properties["Designation"]?.title?.[0]?.plain_text ?? "ALEX-225",
@@ -295,8 +289,6 @@ console.log("Professional raw:", JSON.stringify(properties["Professional Readine
     }
 );
 spartan.readiness = readinessTotals;
-
-console.log("Computed totals:", readinessTotals);
 
     return (
         <main className="min-h-screen bg-black p-6 font-mono text-slate-100">

@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDueDate } from "../../../lib/date";
 import { useEffect, useState } from "react";
 import NavBar from "../../components/NavBar";
 import PageHeader from "../../components/PageHeader";
@@ -12,12 +13,13 @@ type OrderItem = {
     priority: string;
     status: string;
     focusQueue: boolean;
+    estimatedMinutes: number;
 };
 
 type OrdersResponse = {
     focusQueue: OrderItem[];
     dueSoon: OrderItem[];
-    overdue: OrderItem[];
+    nextCritical: OrderItem[];
 };
 
 type PipelineCourse = {
@@ -35,17 +37,6 @@ type PipelineCourse = {
 type PipelineResponse = {
     pipeline: PipelineCourse[];
 };
-
-function formatDueDate(date: string | null) {
-    if (!date) return "NO DUE";
-
-    return new Date(date)
-        .toLocaleDateString("en-US", {
-            month: "short",
-            day: "2-digit",
-        })
-        .toUpperCase();
-}
 
 function getCourseName(courseCode: string) {
     const courseNames: Record<string, string> = {
@@ -176,12 +167,10 @@ function AssignmentItem({
     onComplete: (id: string) => void;
 }) {
     const color =
-        priority?.toLowerCase() === "critical"
+        priority?.toLowerCase() === "high"
             ? "text-red-400"
-            : priority?.toLowerCase() === "high"
-            ? "text-amber-400"
             : priority?.toLowerCase() === "medium"
-            ? "text-yellow-300"
+            ? "text-amber-300"
             : "text-cyan-300";
 
     return (
@@ -215,12 +204,10 @@ function StatBlock({ label, value }: { label: string; value: string }) {
 
 function getPriorityColor(priority: string) {
     switch (priority.toLowerCase()) {
-        case "critical":
-            return "text-red-400";
         case "high":
-            return "text-amber-400";
+            return "text-red-400";
         case "medium":
-            return "text-yellow-300";
+            return "text-amber-300";
         case "low":
         default:
             return "text-cyan-300";
@@ -234,7 +221,7 @@ export default function MedicalUnitPage() {
     const [orders, setOrders] = useState<OrdersResponse>({
         focusQueue: [],
         dueSoon: [],
-        overdue: [],
+        nextCritical: [],
     });
     const [pipeline, setPipeline] = useState<PipelineCourse[]>([]);
 
@@ -245,7 +232,10 @@ export default function MedicalUnitPage() {
     }
 
     async function loadPipeline() {
-        const response = await fetch("/api/smu/pipeline");
+        const response = await fetch("/api/smu/pipeline", {
+            cache: "no-store",
+        });
+
         const data: PipelineResponse = await response.json();
         setPipeline(data.pipeline);
     }
@@ -256,8 +246,6 @@ export default function MedicalUnitPage() {
     }, []);
 
     async function completeAssignment(id: string) {
-        console.log("Completing assignment:", id);
-
         await fetch("/api/smu/orders/complete", {
             method: "POST",
             headers: {
@@ -266,7 +254,7 @@ export default function MedicalUnitPage() {
             body: JSON.stringify({ id }),
         });
 
-        await loadOrders();
+        await Promise.all([loadOrders(), loadPipeline()]);
     }
 
     return (
@@ -384,21 +372,24 @@ export default function MedicalUnitPage() {
                                         )}
                                     </OrderColumn>
 
-                                    <OrderColumn title="Overdue" count={orders.overdue.length}>
-                                        {orders.overdue.length > 0 ? (
-                                            orders.overdue.map((item) => (
-                                                <AssignmentItem
-                                                    key={item.id}
-                                                    title={item.title}
-                                                    meta={`${item.course} • ${formatDueDate(item.dueDate)}`}
-                                                    id={item.id}
-                                                    priority={item.priority}
-                                                    onComplete={completeAssignment}                                             
-                                                />
+                                    <OrderColumn
+                                        title="Plan Ahead"
+                                        count={orders.nextCritical.length}
+                                        >
+                                        {orders.nextCritical.length > 0 ? (
+                                            orders.nextCritical.map((item) => (
+                                            <AssignmentItem
+                                                key={item.id}
+                                                title={item.title}
+                                                meta={`${item.course} • ${formatDueDate(item.dueDate)}`}
+                                                id={item.id}
+                                                priority={item.priority}
+                                                onComplete={completeAssignment}
+                                            />
                                             ))
                                         ) : (
                                             <p className="text-sm uppercase tracking-[0.2em] text-slate-500">
-                                                ✓ Clear
+                                            ✓ Clear
                                             </p>
                                         )}
                                     </OrderColumn>

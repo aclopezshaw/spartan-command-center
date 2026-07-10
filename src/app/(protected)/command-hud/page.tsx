@@ -214,12 +214,6 @@ export default async function CommandHudPage() {
     ["Plan Week", 50, planningComplete],
   ] as const;
 
-  console.log("COMMAND HUD campaignDay:", campaignDay);
-
-  console.log("Local date:", new Date().toString());
-
-  console.log("ISO date:", new Date().toISOString());
-
   return (
     <main className="min-h-screen bg-black p-6 font-mono text-slate-100">
       <div className="mx-auto max-w-7xl space-y-6">
