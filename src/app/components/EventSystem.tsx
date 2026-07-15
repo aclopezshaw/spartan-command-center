@@ -40,29 +40,39 @@ export function EventSystem({ campaignDay }: { campaignDay: number }) {
 
     if (!event) return;
 
-    const response = await fetch("/api/complete-event", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        eventId: event.id,
-        eventTitle: event.title,
-        eventType: event.type,
-        campaignDay,
-        xpReward: event.xpReward ?? (event.type === "Major Event" ? 500 : 250),
-        description: event.prompt,
-      }),
-    });
-
-    if (!response.ok) {
-      console.error("Failed to complete event");
-      return;
-    }
-
     setCompletedEventIds((prev) =>
       prev.includes(eventId) ? prev : [...prev, eventId]
     );
+    setReviewingEventId(null);
+
+    try {
+      const response = await fetch("/api/complete-event", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          eventId: event.id,
+          eventTitle: event.title,
+          eventType: event.type,
+          campaignDay,
+          xpReward:
+            event.xpReward ?? (event.type === "Major Event" ? 500 : 250),
+          description: event.prompt,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error(
+          "Event completed locally, but backend synchronization failed"
+        );
+      }
+    } catch (error) {
+      console.error(
+        "Event completed locally, but backend synchronization failed",
+        error
+      );
+    }
   }
 
   return (

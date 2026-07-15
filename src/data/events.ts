@@ -40,7 +40,7 @@ export const eventCatalog: SpartanEvent[] = [
     id: "academic-aptitude-examination",
     title: "Academic Aptitude Examination",
     type: "Minor Event",
-    unlockDay: 20,
+    unlockDay: 25,
     location: "Testing Center",
     prompt:
       "Academic aptitude evaluation initialized. Requirement: Intelligence Readiness score of at least 1.",
@@ -48,4 +48,17 @@ export const eventCatalog: SpartanEvent[] = [
     backgroundImage: "/images/events/academic-aptitude-examination.png",
     xpReward: 250,
   },
+
+  {
+    id: "final-field-training-exercise",
+    title: "Final Field Training Exercise",
+    type: "Major Event",
+    unlockDay: 30,
+    location: "Training Grounds",
+    prompt:
+      "Final field training exercise initialized. Requirement: All scores of at least 1. One Readiness score of at least 2.",
+    buttonText: "Begin Exercise",
+    backgroundImage: "/images/events/final-field-training-exercise.png",
+    xpReward: 500,
+  }
 ];
