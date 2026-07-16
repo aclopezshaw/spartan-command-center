@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
-import { Client } from "@notionhq/client";
-
-const notion = new Client({ auth: process.env.NOTION_TOKEN });
+import { getNotionClient } from "@/lib/notion-client";
 
 export async function POST(request: Request) {
     try {
+        const notion = getNotionClient();
         const { id } = await request.json();
 
         if (!id) {

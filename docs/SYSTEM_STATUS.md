@@ -12,11 +12,11 @@ This document distinguishes current implementation from intended behavior. “Im
 | --- | --- | --- |
 | Framework | Implemented with Next.js 16.2.9 App Router and React 19.2.4. | `dependencies` in [`package.json`](../package.json) |
 | Styling | Tailwind CSS 4 through PostCSS, with global theme variables. | [`postcss.config.mjs`](../postcss.config.mjs), [`src/app/globals.css`](../src/app/globals.css) |
-| Operational storage | Notion SDK is used by server pages, shared libraries, and Route Handlers. | `notion`, `getTodaySitrep`, and related functions in [`src/lib/notion.ts`](../src/lib/notion.ts) |
+| Operational storage | Notion SDK is used by server pages, shared libraries, and Route Handlers through one lazy, server-only client accessor. | `getNotionClient` in [`src/lib/notion-client.ts`](../src/lib/notion-client.ts); `getTodaySitrep`, `getHydrationTotalForOperationalDay`, `createServiceHistoryEntry`, and related functions in [`src/lib/notion.ts`](../src/lib/notion.ts) |
 | Authentication | Partially implemented. Login sets a static cookie and the protected layout checks its literal value. | `POST` in [`src/app/api/login/route.ts`](../src/app/api/login/route.ts), `ProtectedLayout` in [`src/app/(protected)/layout.tsx`](../src/app/%28protected%29/layout.tsx) |
 | Automated tests | Not implemented. No test runner, test script, or repository test files are present. | `scripts` in [`package.json`](../package.json) |
 | Production build | Implemented and passed during the 2026-07-13 repository review. | `build` script in [`package.json`](../package.json) |
-| Lint baseline | Technical debt. The 2026-07-16 lint run reported 45 errors and 15 warnings. | `lint` script and rules in [`package.json`](../package.json) and [`eslint.config.mjs`](../eslint.config.mjs) |
+| Lint baseline | Technical debt. The 2026-07-16 lint run reported 43 errors and 13 warnings. | `lint` script and rules in [`package.json`](../package.json) and [`eslint.config.mjs`](../eslint.config.mjs) |
 
 ## Product surfaces
 

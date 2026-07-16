@@ -1,9 +1,5 @@
 import { NextResponse } from "next/server";
-import { Client } from "@notionhq/client";
-
-const notion = new Client({
-  auth: process.env.NOTION_TOKEN,
-});
+import { getNotionClient } from "@/lib/notion-client";
 
 function getTitle(page: any) {
   const property = page.properties.Title;
@@ -41,6 +37,7 @@ function getNumber(page: any, propertyName: string) {
 }
 
 export async function GET() {
+  const notion = getNotionClient();
   const databaseId = process.env.ARCHIVES_DATABASE_ID;
 
   if (!databaseId) {

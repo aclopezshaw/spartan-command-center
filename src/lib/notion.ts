@@ -1,69 +1,106 @@
-import { Client } from "@notionhq/client";
+import "server-only";
+
 import {
   addDaysToDateKey,
   getOperationalDateKey,
+  getOperationalDayBounds,
 } from "@/lib/date";
+import {
+  getNotionClient,
+  getRequiredNotionId,
+} from "@/lib/notion-client";
 
-export const notion = new Client({
-  auth: process.env.NOTION_TOKEN,
-});
+type ServiceHistoryEntry = {
+  eventTitle: string;
+  eventType: string;
+  campaignDay: number;
+  xpReward: number;
+  description?: string;
+  eventPageId?: string | null;
+  serviceRecordPageId?: string | null;
+  campaignPageId?: string | null;
+  completedAt?: string;
+};
 
-export async function getAlexServiceRecord() {
-  const dataSourceId = process.env.SERVICE_RECORD_DATA_SOURCE_ID;
-
-  if (!dataSourceId) {
-    throw new Error("Missing SERVICE_RECORD_DATA_SOURCE_ID");
-  }
+async function findAlexServiceRecord() {
+  const notion = getNotionClient();
+  const dataSourceId = getRequiredNotionId(
+    "SERVICE_RECORD_DATA_SOURCE_ID"
+  );
 
   const response = await notion.dataSources.query({
-  data_source_id: dataSourceId,
-  filter: {
-    property: "Designation",
-    title: {
-      equals: "ALEX-225",
+    data_source_id: dataSourceId,
+    filter: {
+      property: "Designation",
+      title: {
+        equals: "ALEX-225",
+      },
     },
-  },
-});
+    page_size: 1,
+  });
 
-  const page = response.results[0];
+  return response.results[0] ?? null;
+}
+
+export async function getAlexServiceRecordPageId() {
+  const page = await findAlexServiceRecord();
+  return page?.id ?? null;
+}
+
+export async function getAlexServiceRecord() {
+  const notion = getNotionClient();
+  const page = await findAlexServiceRecord();
 
   if (!page) {
     return null;
   }
 
-  return await notion.pages.retrieve({
+  return notion.pages.retrieve({
     page_id: page.id,
   });
 }
 
-export async function getTodaySitrep() {
-  const databaseId = process.env.DAILY_SITREP_DATABASE_ID;
-
-  if (!databaseId) {
-    throw new Error("Missing DAILY_SITREP_DATABASE_ID");
-  }
-
-  const today = getOperationalDateKey();
+export async function findTodaySitrep(dateKey = getOperationalDateKey()) {
+  const notion = getNotionClient();
+  const dataSourceId = getRequiredNotionId(
+    "DAILY_SITREP_DATA_SOURCE_ID"
+  );
 
   const response = await notion.dataSources.query({
-    data_source_id: databaseId,
+    data_source_id: dataSourceId,
     filter: {
       property: "Mission Date",
       date: {
-        equals: today,
+        equals: dateKey,
       },
     },
+    page_size: 1,
   });
 
-  if (response.results[0]) {
-    return response.results[0];
+  return response.results[0] ?? null;
+}
+
+export async function getTodaySitrep() {
+  const notion = getNotionClient();
+  const dataSourceId = getRequiredNotionId(
+    "DAILY_SITREP_DATA_SOURCE_ID"
+  );
+  const today = getOperationalDateKey();
+  const existing = await findTodaySitrep(today);
+
+  if (existing) {
+    return existing;
   }
 
-  const spartan = (await getAlexServiceRecord()) as any;
+  const spartan = await getAlexServiceRecord();
 
-  const newSitrep = await notion.pages.create({
+  if (!spartan) {
+    throw new Error("Service Record not found for ALEX-225");
+  }
+
+  return notion.pages.create({
     parent: {
-      data_source_id: databaseId,
+      data_source_id: dataSourceId,
     },
     properties: {
       "Daily Log": {
@@ -89,8 +126,123 @@ export async function getTodaySitrep() {
       },
     },
   } as any);
+}
 
-  return newSitrep;
+export async function getHydrationTotalForOperationalDay(date = new Date()) {
+  const notion = getNotionClient();
+  const dataSourceId = getRequiredNotionId(
+    "HYDRATION_LOG_DATA_SOURCE_ID"
+  );
+  const { start, endExclusive } = getOperationalDayBounds(date);
+
+  const response = await notion.dataSources.query({
+    data_source_id: dataSourceId,
+    filter: {
+      and: [
+        {
+          property: "Date",
+          date: {
+            on_or_after: start.toISOString(),
+          },
+        },
+        {
+          property: "Date",
+          date: {
+            before: endExclusive.toISOString(),
+          },
+        },
+      ],
+    },
+  });
+
+  return response.results.reduce((sum, page: any) => {
+    return sum + (page.properties.Amount?.number ?? 0);
+  }, 0);
+}
+
+export async function createServiceHistoryEntry({
+  eventTitle,
+  eventType,
+  campaignDay,
+  xpReward,
+  description,
+  eventPageId,
+  serviceRecordPageId,
+  campaignPageId,
+  completedAt = new Date().toISOString(),
+}: ServiceHistoryEntry) {
+  const notion = getNotionClient();
+  const databaseId = getRequiredNotionId(
+    "SERVICE_HISTORY_DATABASE_ID"
+  );
+
+  return notion.pages.create({
+    parent: {
+      database_id: databaseId,
+    },
+    properties: {
+      Title: {
+        title: [
+          {
+            text: {
+              content: `${eventTitle} Completed`,
+            },
+          },
+        ],
+      },
+      Date: {
+        date: {
+          start: completedAt,
+        },
+      },
+      "Campaign Day": {
+        number: campaignDay,
+      },
+      "Entry Type": {
+        select: {
+          name: eventType,
+        },
+      },
+      "XP Awarded": {
+        number: xpReward,
+      },
+      "Readiness Category": {
+        select: {
+          name: "None",
+        },
+      },
+      Description: {
+        rich_text: [
+          {
+            text: {
+              content: description ?? "",
+            },
+          },
+        ],
+      },
+      ...(eventPageId
+        ? {
+            "Related Event": {
+              relation: [{ id: eventPageId }],
+            },
+          }
+        : {}),
+      ...(serviceRecordPageId
+        ? {
+            "Related Service Record": {
+              relation: [{ id: serviceRecordPageId }],
+            },
+          }
+        : {}),
+      ...(campaignPageId
+        ? {
+            "Related Campaign": {
+              relation: [{ id: campaignPageId }],
+            },
+          }
+        : {}),
+    },
+  });
 }
 
 export async function updateDailySitrepCheckbox(
@@ -98,7 +250,7 @@ export async function updateDailySitrepCheckbox(
   propertyName: string,
   checked: boolean
 ) {
-  return await notion.pages.update({
+  return getNotionClient().pages.update({
     page_id: pageId,
     properties: {
       [propertyName]: {
@@ -109,16 +261,14 @@ export async function updateDailySitrepCheckbox(
 }
 
 export async function getWorkoutCountForWeek(weekStart: string) {
-  const databaseId = process.env.WORKOUT_LOG_DATABASE_ID;
-
-  if (!databaseId) {
-    throw new Error("Missing WORKOUT_LOG_DATABASE_ID");
-  }
-
+  const notion = getNotionClient();
+  const dataSourceId = getRequiredNotionId(
+    "WORKOUT_LOG_DATABASE_ID"
+  );
   const weekEnd = addDaysToDateKey(weekStart, 7);
 
   const response = await notion.dataSources.query({
-    data_source_id: databaseId,
+    data_source_id: dataSourceId,
     filter: {
       and: [
         {
@@ -140,17 +290,14 @@ export async function getWorkoutCountForWeek(weekStart: string) {
   return response.results.length;
 }
 
-export async function getCurrentWeeklyOperations(
-  weekStart: string
-) {
-  const databaseId = process.env.WEEKLY_OPERATIONS_DATABASE_ID;
-
-  if (!databaseId) {
-    throw new Error("Missing WEEKLY_OPERATIONS_DATABASE_ID");
-  }
+export async function getCurrentWeeklyOperations(weekStart: string) {
+  const notion = getNotionClient();
+  const dataSourceId = getRequiredNotionId(
+    "WEEKLY_OPERATIONS_DATABASE_ID"
+  );
 
   const response = await notion.dataSources.query({
-    data_source_id: databaseId,
+    data_source_id: dataSourceId,
     filter: {
       property: "Week Start",
       date: {
@@ -162,24 +309,19 @@ export async function getCurrentWeeklyOperations(
   return response.results[0] ?? null;
 }
 
-export async function getOrCreateWeeklyOperations(
-  weekStart: string
-) {
-  const existing = await getCurrentWeeklyOperations(
-    weekStart
-  );
+export async function getOrCreateWeeklyOperations(weekStart: string) {
+  const existing = await getCurrentWeeklyOperations(weekStart);
 
   if (existing) return existing;
 
-  const databaseId = process.env.WEEKLY_OPERATIONS_DATABASE_ID;
+  const notion = getNotionClient();
+  const dataSourceId = getRequiredNotionId(
+    "WEEKLY_OPERATIONS_DATABASE_ID"
+  );
 
-  if (!databaseId) {
-    throw new Error("Missing WEEKLY_OPERATIONS_DATABASE_ID");
-  }
-
-  const page = await notion.pages.create({
+  return notion.pages.create({
     parent: {
-      data_source_id: databaseId,
+      data_source_id: dataSourceId,
     },
     properties: {
       "Week Start": {
@@ -187,22 +329,17 @@ export async function getOrCreateWeeklyOperations(
           start: weekStart,
         },
       },
-
-      "Workouts": {
+      Workouts: {
         checkbox: false,
       },
-
-      "Shot": {
+      Shot: {
         checkbox: false,
       },
-
-      "Planning": {
+      Planning: {
         checkbox: false,
       },
     },
   });
-
-  return page;
 }
 
 export async function updateWeeklyOperationCheckbox(
@@ -210,7 +347,7 @@ export async function updateWeeklyOperationCheckbox(
   propertyName: string,
   checked: boolean
 ) {
-  return notion.pages.update({
+  return getNotionClient().pages.update({
     page_id: pageId,
     properties: {
       [propertyName]: {

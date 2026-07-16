@@ -1,87 +1,22 @@
 import { NextResponse } from "next/server";
-import { Client } from "@notionhq/client";
 import {
-  getOperationalDateKey,
-  getOperationalDayBounds,
-} from "@/lib/date";
-
-const notion = new Client({ auth: process.env.NOTION_TOKEN });
-
-async function findServiceRecordPageId() {
-  const dataSourceId = process.env.SERVICE_RECORD_DATA_SOURCE_ID;
-
-  if (!dataSourceId) return null;
-
-  const response = await notion.dataSources.query({
-    data_source_id: dataSourceId,
-    page_size: 1,
-  });
-
-  return response.results[0]?.id ?? null;
-}
-
-async function getTodaySitrepPageId() {
-  const dataSourceId = process.env.DAILY_SITREP_DATA_SOURCE_ID;
-  if (!dataSourceId) return null;
-
-  const today = getOperationalDateKey();
-
-  const response = await notion.dataSources.query({
-    data_source_id: dataSourceId,
-    filter: {
-      property: "Mission Date",
-      date: {
-        equals: today,
-      },
-    },
-    page_size: 1,
-  });
-
-  return response.results[0]?.id ?? null;
-}
-
-async function getTodayHydrationTotal() {
-  const dataSourceId = process.env.HYDRATION_LOG_DATA_SOURCE_ID;
-  if (!dataSourceId) return 0;
-
-  const { start, endExclusive } = getOperationalDayBounds();
-
-  const response = await notion.dataSources.query({
-    data_source_id: dataSourceId,
-    filter: {
-      and: [
-        {
-          property: "Date",
-          date: {
-            on_or_after: start.toISOString(),
-          },
-        },
-        {
-          property: "Date",
-          date: {
-            before: endExclusive.toISOString(),
-          },
-        },
-      ],
-    },
-  });
-
-  return response.results.reduce((sum, page: any) => {
-    return sum + (page.properties.Amount?.number ?? 0);
-  }, 0);
-}
+  findTodaySitrep,
+  getAlexServiceRecordPageId,
+  getHydrationTotalForOperationalDay,
+} from "@/lib/notion";
+import { getNotionClient } from "@/lib/notion-client";
 
 async function checkWaterObjectiveIfComplete() {
-  const total = await getTodayHydrationTotal();
+  const total = await getHydrationTotalForOperationalDay();
 
   if (total < 96) return;
 
-  const sitrepPageId = await getTodaySitrepPageId();
+  const sitrep = await findTodaySitrep();
 
-  if (!sitrepPageId) return;
+  if (!sitrep) return;
 
-  await notion.pages.update({
-    page_id: sitrepPageId,
+  await getNotionClient().pages.update({
+    page_id: sitrep.id,
     properties: {
       Water: {
         checkbox: true,
@@ -92,6 +27,7 @@ async function checkWaterObjectiveIfComplete() {
 
 export async function POST(request: Request) {
   try {
+    const notion = getNotionClient();
     const databaseId = process.env.HYDRATION_LOG_DATABASE_ID;
     if (!databaseId) throw new Error("Missing HYDRATION_LOG_DATABASE_ID");
 
@@ -105,7 +41,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const serviceRecordPageId = await findServiceRecordPageId();
+    const serviceRecordPageId = await getAlexServiceRecordPageId();
 
     await notion.pages.create({
       parent: { database_id: databaseId },

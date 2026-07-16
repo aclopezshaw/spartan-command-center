@@ -1,10 +1,8 @@
-import { Client } from "@notionhq/client";
 import { getAlexServiceRecord } from "../../../lib/notion";
+import { getNotionClient } from "@/lib/notion-client";
 import Image from "next/image";
 import NavBar from "../../components/NavBar";
 import PageHeader from "../../components/PageHeader";
-
-const notion = new Client({ auth: process.env.NOTION_TOKEN });
 
 function getNumberProperty(properties: any, propertyName: string) {
     const property = properties[propertyName];
@@ -202,6 +200,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function Home() {
+    const notion = getNotionClient();
     const record = await getAlexServiceRecord();
     const freshRecord = await notion.pages.retrieve({
   page_id: (record as any).id,

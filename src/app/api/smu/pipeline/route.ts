@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { Client } from "@notionhq/client";
 import { formatDueDate, getOperationalWeekRange } from "@/lib/date";
+import { getNotionClient } from "@/lib/notion-client";
 
-const notion = new Client({ auth: process.env.NOTION_TOKEN });
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -55,6 +54,7 @@ function percent(completed: number, total: number) {
 }
 
 async function getAllAssignments(dataSourceId: string) {
+  const notion = getNotionClient();
   const results: any[] = [];
   let cursor: string | undefined = undefined;
 

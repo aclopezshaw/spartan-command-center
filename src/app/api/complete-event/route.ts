@@ -1,24 +1,12 @@
 import { NextResponse } from "next/server";
-import { Client } from "@notionhq/client";
-
-const notion = new Client({
-  auth: process.env.NOTION_TOKEN,
-});
-
-async function findServiceRecordPageId() {
-  const dataSourceId = process.env.SERVICE_RECORD_DATA_SOURCE_ID;
-
-  if (!dataSourceId) return null;
-
-  const response = await notion.dataSources.query({
-    data_source_id: dataSourceId,
-    page_size: 1,
-  });
-
-  return response.results[0]?.id ?? null;
-}
+import {
+  createServiceHistoryEntry,
+  getAlexServiceRecordPageId,
+} from "@/lib/notion";
+import { getNotionClient } from "@/lib/notion-client";
 
 async function findEventPageId(eventId: string) {
+  const notion = getNotionClient();
   const dataSourceId = process.env.EVENTS_DATA_SOURCE_ID;
 
   if (!dataSourceId) return null;
@@ -42,18 +30,16 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     const {
-      eventId,
       eventTitle,
       eventType,
       campaignDay,
       xpReward,
-      eventPageId,
       campaignPageId,
       description,
     } = body;
 
     const resolvedEventPageId = await findEventPageId(body.eventId);
-    const serviceRecordPageId = await findServiceRecordPageId();
+    const serviceRecordPageId = await getAlexServiceRecordPageId();
 
     const databaseId = process.env.SERVICE_HISTORY_DATABASE_ID;
 
@@ -64,72 +50,15 @@ export async function POST(request: Request) {
       );
     }
 
-    await notion.pages.create({
-      parent: {
-        database_id: databaseId,
-      },
-      properties: {
-        Title: {
-          title: [
-            {
-              text: {
-                content: `${eventTitle} Completed`,
-              },
-            },
-          ],
-        },
-        Date: {
-          date: {
-            start: new Date().toISOString(),
-          },
-        },
-        "Campaign Day": {
-          number: campaignDay,
-        },
-        "Entry Type": {
-          select: {
-            name: eventType,
-          },
-        },
-        "XP Awarded": {
-          number: xpReward,
-        },
-        "Readiness Category": {
-          select: {
-            name: "None",
-          },
-        },
-        Description: {
-          rich_text: [
-            {
-              text: {
-                content: description ?? "",
-              },
-            },
-          ],
-        },
-        ...(resolvedEventPageId
-        ? {
-            "Related Event": {
-                relation: [{ id: resolvedEventPageId }],
-            },
-            }
-        : {}),
-        ...(serviceRecordPageId
-        ? {
-            "Related Service Record": {
-                relation: [{ id: serviceRecordPageId }],
-            },
-            }
-        : {}),
-        ...(campaignPageId
-          ? {
-              "Related Campaign": {
-                relation: [{ id: campaignPageId }],
-              },
-            }
-          : {}),
-      },
+    await createServiceHistoryEntry({
+      eventTitle,
+      eventType,
+      campaignDay,
+      xpReward,
+      description,
+      eventPageId: resolvedEventPageId,
+      serviceRecordPageId,
+      campaignPageId,
     });
 
     return NextResponse.json({ ok: true });

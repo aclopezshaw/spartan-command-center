@@ -1,5 +1,8 @@
-import { notion } from "@/lib/notion";
 import { addDaysToDateKey, getOperationalDateKey } from "@/lib/date";
+import {
+  getNotionClient,
+  getRequiredNotionId,
+} from "@/lib/notion-client";
 
 type AchievementTrack = "Persistence" | "Discipline" | "Classified";
 
@@ -18,8 +21,13 @@ type Achievement = {
 };
 
 export async function getUnearnedAchievements() {
+  const notion = getNotionClient();
+  const dataSourceId = getRequiredNotionId(
+    "ACHIEVEMENTS_DATA_SOURCE_ID"
+  );
+
   const response = await notion.dataSources.query({
-    data_source_id: process.env.ACHIEVEMENTS_DATA_SOURCE_ID!,
+    data_source_id: dataSourceId,
     filter: {
       property: "Date Earned",
       date: {
@@ -56,11 +64,10 @@ function calculateCurrentDailyStreak(dateStrings: string[]): number {
 async function getDailyCheckboxStats(
   propertyName: string
 ): Promise<ObjectiveStats> {
-  const dataSourceId = process.env.DAILY_SITREP_DATA_SOURCE_ID;
-
-  if (!dataSourceId) {
-    throw new Error("Missing DAILY_SITREP_DATA_SOURCE_ID");
-  }
+  const notion = getNotionClient();
+  const dataSourceId = getRequiredNotionId(
+    "DAILY_SITREP_DATA_SOURCE_ID"
+  );
 
   const response = await notion.dataSources.query({
     data_source_id: dataSourceId,
@@ -132,7 +139,7 @@ function isAchievementEarned(
 }
 
 async function awardAchievement(achievementId: string, date: string) {
-  await notion.pages.update({
+  await getNotionClient().pages.update({
     page_id: achievementId,
     properties: {
       "Date Earned": {

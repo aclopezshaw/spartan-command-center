@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { Client } from "@notionhq/client";
 import {
     addDaysToDateKey,
     getOperationalDateBounds,
     getOperationalDateKey,
     getOperationalDateKeyFromValue,
 } from "@/lib/date";
+import { getNotionClient } from "@/lib/notion-client";
 
-const notion = new Client({ auth: process.env.NOTION_TOKEN });
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -116,6 +115,7 @@ function getRollupText(property: any) {
 }
 
 async function getRelationTitle(property: any) {
+    const notion = getNotionClient();
     const relationId = property?.relation?.[0]?.id;
 
     if (!relationId) return "";
@@ -135,6 +135,7 @@ async function getRelationTitle(property: any) {
 
 export async function GET() {
     try {
+        const notion = getNotionClient();
         const databaseId = process.env.ASSIGNMENTS_DATA_SOURCE_ID;
 
         if (!databaseId) {

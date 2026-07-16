@@ -1,7 +1,7 @@
 # Architecture
 
 **Document status:** Living description of current architecture  
-**Last verified:** 2026-07-13
+**Last verified:** 2026-07-16
 
 ## Overview
 
@@ -60,14 +60,14 @@ The repository currently has no `loading.tsx` or `error.tsx` boundaries.
 
 [ADR-0001](adr/0001-notion-as-operational-data-store.md) records Notion as the current operational data store.
 
-Data access is not centralized:
+Notion client construction is centralized:
 
-- `notion` and common helpers are exported from `src/lib/notion.ts`.
-- `src/lib/achievements.ts` reuses that exported client.
-- Several server pages and Route Handlers create their own `Client` at module scope.
-- Database IDs and data-source IDs are selected independently by each caller.
+- `getNotionClient` in `src/lib/notion-client.ts` lazily initializes the only production `Client` instance, validates `NOTION_TOKEN` on first use, and is protected by `server-only`.
+- `src/lib/notion.ts` owns shared Service Record, Daily SITREP, hydration-total, Service History, workout, and Weekly Operations helpers.
+- Server Components, Route Handlers, and `src/lib/achievements.ts` obtain the SDK through the shared accessor rather than constructing module-local clients.
+- Route-specific queries remain close to their domains, while required identifier lookup produces explicit missing-configuration errors.
 
-This fragmentation is current implementation and documented technical debt, not the intended final data-access architecture.
+Schema mapping, pagination, authorization, and error translation are still distributed technical debt; ticket #11 centralizes the client and the duplicated domain operations without claiming that the full data-access layer is complete.
 
 ## Main request flows
 
@@ -83,7 +83,7 @@ This fragmentation is current implementation and documented technical debt, not 
 
 1. `TrainingReportsPage.submitHydration` posts an amount to `/api/hydration-log`.
 2. The Route Handler creates a Notion Hydration Log page.
-3. It aggregates the current America/Denver operational day using DST-safe UTC query boundaries from `src/lib/date.ts`.
+3. It aggregates the current America/Denver operational day through `getHydrationTotalForOperationalDay`, using DST-safe UTC query boundaries from `src/lib/date.ts`.
 4. At 96 ounces, it updates the current Denver-dated SITREP Water checkbox.
 5. The page reloads `/api/hydration-total`.
 
@@ -94,7 +94,7 @@ Daily record selection and hydration aggregation now share the America/Denver op
 1. `EventSystem` derives the active event from `eventCatalog` and browser-local completed IDs.
 2. As an interim fallback for SDCB #187, the browser immediately adds the event ID to local state and `localStorage` so a failed backend request does not block local completion.
 3. It makes a best-effort post of client-supplied event metadata to `/api/complete-event`.
-4. When the request succeeds, the Route Handler optionally resolves Event and Service Record relations and creates a Service History page in Notion.
+4. When the request succeeds, the Route Handler optionally resolves Event and Service Record relations and calls the shared `createServiceHistoryEntry` helper to create a Service History page in Notion.
 5. A failed request is logged but does not roll back browser-local completion. Backend history, rewards, and cross-device completion remain unresolved.
 
 ### Academic assignment flow

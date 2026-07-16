@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-07-13
 - **Decision owners:** Spartan Command Center product owner and architecture
-- **Related SDCB tickets:** None required for the existing decision
+- **Related SDCB tickets:** [#11 — Create Notion API helper functions](https://app.notion.com/p/390bc7d80f4580e5b592fc84d2ce8b38)
 - **Supersedes:** None
 
 ## Context
@@ -12,7 +12,8 @@ Spartan Command Center currently stores most durable operational records in Noti
 
 Verified examples include:
 
-- `getTodaySitrep`, `getOrCreateWeeklyOperations`, and the shared `notion` client in `src/lib/notion.ts`.
+- The lazy, server-only `getNotionClient` accessor in `src/lib/notion-client.ts`.
+- `getTodaySitrep`, `getHydrationTotalForOperationalDay`, `createServiceHistoryEntry`, and `getOrCreateWeeklyOperations` in `src/lib/notion.ts`.
 - `evaluateAchievements` in `src/lib/achievements.ts`.
 - Hydration writes in `POST` from `src/app/api/hydration-log/route.ts`.
 - Reading-report writes in `POST` from `src/app/api/intel-reports/route.ts`.
@@ -44,7 +45,7 @@ This decision does not require every transient UI state to be stored in Notion, 
 
 ### Risks
 
-- Direct SDK calls distributed across pages and Route Handlers can drift. A future centralized server-only data-access layer should own schema mapping, pagination, validation, and error translation.
+- Route-specific SDK queries and heterogeneous property mapping can still drift even though client construction and the most duplicated domain operations are centralized. The data-access layer still needs broader schema mapping, pagination, authorization, validation, and error translation.
 - Multi-step writes such as Reading Report creation plus Current Page update are not transactional.
 - Operational availability depends on Notion availability and integration permissions.
 
@@ -64,7 +65,7 @@ May become appropriate for high-volume integrations, synchronization, or analyti
 
 ## Implementation status
 
-**Partially implemented.** Most durable workflows use Notion, but data access is fragmented and several mobile/event flows use other storage. See [`../SYSTEM_STATUS.md`](../SYSTEM_STATUS.md).
+**Partially implemented.** Most durable workflows use Notion. Client construction is centralized behind one lazy, server-only accessor, and shared helpers own Service Record lookup, current SITREP lookup, Denver-day hydration totals, and Service History creation. Route-specific schema mapping, pagination, authorization, and several mobile/event storage paths remain incomplete. See [`../SYSTEM_STATUS.md`](../SYSTEM_STATUS.md).
 
 ## Validation
 
@@ -80,4 +81,3 @@ May become appropriate for high-volume integrations, synchronization, or analyti
 - Atomic multi-record transactions become essential.
 - Multi-user identity, privacy, or access-control requirements exceed the workspace model.
 - Query performance blocks core user workflows.
-
