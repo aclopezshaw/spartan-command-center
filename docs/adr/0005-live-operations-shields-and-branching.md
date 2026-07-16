@@ -8,7 +8,7 @@
 
 ## Context
 
-The current Command HUD displays `Shield Integrity` with `ProgressBar value={100}` even though the repository has no authoritative Shield state, damage, recharge, or health model. See `CommandHudPage` in [`src/app/(protected)/command-hud/page.tsx`](../../src/app/%28protected%29/command-hud/page.tsx). The Armory is also a placeholder that says its systems are pending. See `ArmoryPage` in [`src/app/(protected)/armory/page.tsx`](../../src/app/%28protected%29/armory/page.tsx).
+Before SDCB #238, the Command HUD displayed `Shield Integrity` with `ProgressBar value={100}` even though the repository had no authoritative Shield state, damage, recharge, or health model. The inactive display has now been removed from `CommandHudPage` in [`src/app/(protected)/command-hud/page.tsx`](../../src/app/%28protected%29/command-hud/page.tsx). The Armory remains a placeholder that says its systems are pending. See `ArmoryPage` in [`src/app/(protected)/armory/page.tsx`](../../src/app/%28protected%29/armory/page.tsx).
 
 Replacing the inactive Shield display with a health bar would create another unsupported mechanic. Removing Shields permanently would also discard a strong future connection among real-world readiness, Spartan armor, operational consequences, campaign recovery, and long-term progression.
 
@@ -22,7 +22,7 @@ Real-world academic assignment completion may contribute to specialization progr
 
 Remove or hide the inactive 100% Shield display during milestone 0.6. Do not replace it with a health bar. Spartan Command Center does not currently track a truthful player-health value.
 
-This is planned under [SDCB #238](https://app.notion.com/39ebc7d80f458111b201effe3eac3788). It is not implemented merely because this ADR is Accepted.
+This removal is implemented under [SDCB #238](https://app.notion.com/39ebc7d80f458111b201effe3eac3788).
 
 ### Canonical 1.0 release structure
 
@@ -185,7 +185,7 @@ Rejected for the current scope because Mission Intel only projects information f
 
 ## Implementation status
 
-**Planned.** The SDCB and Release Operations contain the approved release, epic, and ticket structure. The repository still renders a hardcoded 100% Shield display and a placeholder Armory; none of the accepted 1.0 Shield, Mission Intel, campaign, branching, or skill-tree behavior is implemented.
+**Partially implemented.** The milestone 0.6 inactive Shield placeholder removal is implemented. The placeholder Armory remains, and the accepted 1.0 Shield, Mission Intel, campaign, branching, and skill-tree behavior is planned but not implemented.
 
 ## Validation
 
