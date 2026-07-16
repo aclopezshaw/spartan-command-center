@@ -1,7 +1,7 @@
 # Spartan Command Center documentation
 
 **Document status:** Living index  
-**Last repository review:** 2026-07-13
+**Last repository review:** 2026-07-15
 
 This directory explains how Spartan Command Center works, why it is designed this way, what is incomplete, and what may be built later.
 
@@ -28,11 +28,12 @@ The authority boundaries are recorded in [ADR-0002](adr/0002-source-of-truth-hie
 | Deferred | Work was deliberately postponed with a reason and reconsideration condition. |
 | Technical debt | Existing implementation requires correction, consolidation, hardening, or tests. |
 
-## Phase 1 documents
+## Documentation set
 
 - [Product Vision](PRODUCT_VISION.md) — durable product purpose and design principles.
 - [System Status](SYSTEM_STATUS.md) — evidence-backed implementation inventory.
 - [Architecture](ARCHITECTURE.md) — current components, boundaries, and request flows.
+- [Product Architecture Map](PRODUCT_ARCHITECTURE_MAP.md) — visual milestone, release, and epic hierarchy with direct SDCB ticket counts.
 - [Roadmap](ROADMAP.md) — planned, proposed, and deferred direction.
 - [Technical Debt](TECHNICAL_DEBT.md) — known engineering liabilities and verified tickets.
 - [Architecture Decision Records](adr/README.md) — decisions and proposals with consequences.
@@ -51,4 +52,3 @@ The authority boundaries are recorded in [ADR-0002](adr/0002-source-of-truth-hie
 ## Maintenance cadence
 
 Review `SYSTEM_STATUS.md`, `ROADMAP.md`, and `TECHNICAL_DEBT.md` whenever a ticket is deployed. Review architecture and ADRs whenever a system boundary or source-of-truth decision changes.
-

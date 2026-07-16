@@ -3,7 +3,7 @@
 **Document status:** Living product direction  
 **Implementation authority:** [`SYSTEM_STATUS.md`](SYSTEM_STATUS.md) and repository code  
 **Historical sources:** [`MIGRATION_NOTES.md`](MIGRATION_NOTES.md) and [`V0.8.4_REVIEW_HANDOFF.md`](V0.8.4_REVIEW_HANDOFF.md)  
-**Accepted architecture:** [`ADR-0004`](adr/0004-progression-engine-roadmap-structure.md)
+**Accepted architecture:** [`ADR-0004`](adr/0004-progression-engine-roadmap-structure.md), [`ADR-0005`](adr/0005-live-operations-shields-and-branching.md), [`ADR-0006`](adr/0006-command-school-trust-and-qualification.md), and [`ADR-0007`](adr/0007-academic-operations-and-specialization-overlay.md)
 
 ## Purpose
 
@@ -63,13 +63,13 @@ Spartan uses two cooperating categories.
 
 ### Production systems
 
-Production systems collect or organize real-world activity. They include Daily SITREP, Weekly Operations, the Spartan Medical Unit, Intel Reports, Training Reports, academic and assignment tracking, workouts, hydration, and reading.
+Production systems collect or organize real-world activity. They include Daily SITREP, Weekly Operations, Academic Operations, the current Spartan Medical Unit presentation, Intel Reports, Training Reports, workouts, hydration, and reading. Academic Operations is the authoritative core domain for real-world courses, assignments, completion, readiness, recommendations, and records; it remains useful independently of any campaign or specialization state.
 
 Several production systems are implemented or partially implemented. Their exact current status is maintained in [`SYSTEM_STATUS.md`](SYSTEM_STATUS.md).
 
 ### Motivation wrappers
 
-Motivation wrappers make real-world activity feel meaningful. They include achievements, readiness, Service Record, Campaign History, promotions, Fireteam relationships, Command Trust, events, armor, and skill trees.
+Motivation wrappers make real-world activity feel meaningful. They include achievements, readiness, Service Record, Campaign History, promotions, Fireteam relationships, Command Trust, events, specialization curricula, armor, and skill trees. Specialization School is a configurable canon overlay that may derive private, attributable competency evidence from Academic Operations without owning or rewriting the source records.
 
 Implementation varies. Achievements, readiness, Service Record, and early campaign-event surfaces exist in partial form. Fireteam, Unit Cohesion, Command Trust, specialization progression, persistent Live Operations, and the Armory skill tree are planned or unresolved rather than implemented.
 
@@ -108,6 +108,7 @@ Current implementation varies significantly by area. Armory, Promotion Board, Ca
 - Recommendations involving health, recovery, pain, or training load require conservative design and clear user control.
 - Notion is the current operational data store, not an irreversible commitment to every future use case.
 - Fireteam companions do not represent multiplayer accounts or other human users.
+- Raw course names, assignment titles, grades, and schedules remain private by default; future shared surfaces consume only the minimum derived specialization or qualification state they require.
 - Failure and decay mechanics must be meaningful but gradual, explainable, and recoverable.
 - The broader Jarvis-style personal operating-system concept remains proposed until its scope is deliberately approved.
 

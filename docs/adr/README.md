@@ -42,3 +42,6 @@ Do not use an ADR for routine implementation details, bug reports, or task track
 | [ADR-0002](0002-source-of-truth-hierarchy.md) | Accepted | Separate authority among code, Notion, SDCB, documentation, and Git history. |
 | [ADR-0003](0003-denver-operational-time.md) | Proposed | Evaluate America/Denver as the canonical operational timezone. |
 | [ADR-0004](0004-progression-engine-roadmap-structure.md) | Accepted | Make the Progression Engine the product north star and organize the roadmap by player transformation. |
+| [ADR-0005](0005-live-operations-shields-and-branching.md) | Accepted | Structure Live Operations around graduation, habit-recharged Shields, truthful Mission Intel, branching checkpoints, and Armory progression. |
+| [ADR-0006](0006-command-school-trust-and-qualification.md) | Accepted | Structure Command School around durable assignment, recoverable Command Trust, Battalion Command, and a qualification-only handoff to Specialization School. |
+| [ADR-0007](0007-academic-operations-and-specialization-overlay.md) | Accepted | Keep Academic Operations authoritative and domain-neutral while Specialization School consumes private, versioned evidence through a configurable canon overlay. |
