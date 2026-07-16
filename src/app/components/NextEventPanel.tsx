@@ -13,7 +13,10 @@ export function NextEventPanel({
   onReview?: () => void;
 }) {
   const daysRemaining = event.unlockDay - campaignDay;
-  const isToday = daysRemaining <= 0;
+  const isAvailable = isActive || daysRemaining <= 0;
+  const countdownMessage = isAvailable
+    ? "Available Today"
+    : `${daysRemaining} Day${daysRemaining === 1 ? "" : "s"} Remaining`;
 
   return (
     <HudPanel title="Next Event" titleClassName="text-cyan-300 tracking-[0.4em]">
@@ -27,11 +30,11 @@ export function NextEventPanel({
         </p>
 
         <p className="text-center text-cyan-300 text-med font-semibold">
-          {daysRemaining} Day{daysRemaining !== 1 ? "s" : ""} Remaining
+          {countdownMessage}
         </p>
 
         <p className="text-xs text-slate-400">
-          Report to {event.location} immediately.
+          Report to {event.location} {isAvailable ? "immediately" : "when available"}.
         </p>
         {isActive && (
           <button

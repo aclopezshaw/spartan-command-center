@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { Client } from "@notionhq/client";
+import {
+  getOperationalDateKey,
+  getOperationalDayBounds,
+} from "@/lib/date";
 
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
 
@@ -20,12 +24,7 @@ async function getTodaySitrepPageId() {
   const dataSourceId = process.env.DAILY_SITREP_DATA_SOURCE_ID;
   if (!dataSourceId) return null;
 
-  const today = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Denver",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
+  const today = getOperationalDateKey();
 
   const response = await notion.dataSources.query({
     data_source_id: dataSourceId,
@@ -45,11 +44,7 @@ async function getTodayHydrationTotal() {
   const dataSourceId = process.env.HYDRATION_LOG_DATA_SOURCE_ID;
   if (!dataSourceId) return 0;
 
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
+  const { start, endExclusive } = getOperationalDayBounds();
 
   const response = await notion.dataSources.query({
     data_source_id: dataSourceId,
@@ -64,7 +59,7 @@ async function getTodayHydrationTotal() {
         {
           property: "Date",
           date: {
-            on_or_before: end.toISOString(),
+            before: endExclusive.toISOString(),
           },
         },
       ],

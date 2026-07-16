@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { Client } from "@notionhq/client";
+import { formatDueDate, getOperationalWeekRange } from "@/lib/date";
 
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
 export const dynamic = "force-dynamic";
@@ -48,25 +49,6 @@ function isComplete(status: string) {
     return ["Complete", "Completed", "Done"].includes(status);
 }
 
-function getWeekRange() {
-    const now = new Date();
-
-    const start = new Date(now);
-
-    // Monday = first day of week
-    const day = start.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
-    const diff = day === 0 ? -6 : 1 - day;
-
-    start.setDate(start.getDate() + diff);
-    start.setHours(0, 0, 0, 0);
-
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    end.setHours(23, 59, 59, 999);
-
-    return { start, end };
-}
-
 function percent(completed: number, total: number) {
     if (total === 0) return 0;
     return Math.round((completed / total) * 100);
@@ -104,7 +86,10 @@ export async function GET() {
         const pages = await getAllAssignments(dataSourceId);
         const assignments = pages.map(normalizeAssignment);
 
-        const { start, end } = getWeekRange();
+        const { startDateKey, endDateKeyExclusive } = getOperationalWeekRange(
+            new Date(),
+            1
+        );
 
         const courses = Array.from(
             new Set(assignments.map((a) => a.course).filter(Boolean))
@@ -118,8 +103,11 @@ export async function GET() {
             const thisWeekAssignments = courseAssignments.filter((a) => {
                 if (!a.dueDate) return false;
 
-                const due = new Date(a.dueDate);
-                return due >= start && due <= end;
+                const dueDateKey = a.dueDate.split("T")[0];
+                return (
+                    dueDateKey >= startDateKey &&
+                    dueDateKey < endDateKeyExclusive
+                );
             });
 
             const quarterTotal = courseAssignments.length;
@@ -136,8 +124,7 @@ export async function GET() {
                 .filter((a) => a.dueDate && !isComplete(a.status))
                 .sort(
                     (a, b) =>
-                        new Date(a.dueDate!).getTime() -
-                        new Date(b.dueDate!).getTime()
+                        a.dueDate!.localeCompare(b.dueDate!)
                 )[0];
 
             return {
@@ -150,12 +137,7 @@ export async function GET() {
                 quarterComplete,
                 quarterTotal,
                 next: nextAssignment?.dueDate
-                    ? `Next: ${new Date(nextAssignment.dueDate)
-                          .toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "2-digit",
-                          })
-                          .toUpperCase()}`
+                    ? `Next: ${formatDueDate(nextAssignment.dueDate)}`
                     : "No upcoming",
             };
         });

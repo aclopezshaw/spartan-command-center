@@ -4,18 +4,13 @@ import HudPanel from "../../components/HudPanel"
 import NavBar from "../../components/NavBar";
 import PageHeader from "../../components/PageHeader";
 import { EventSystem } from "../../components/EventSystem";
+import {
+  differenceInDateKeys,
+  getOperationalDateKey,
+  getOperationalHour,
+  getOperationalWeekRange,
+} from "@/lib/date";
 import { getAlexServiceRecord, getOrCreateWeeklyOperations, getTodaySitrep, getWorkoutCountForWeek, updateWeeklyOperationCheckbox } from "@/lib/notion";
-
-function ProgressBar({ value }: { value: number }) {
-  return (
-    <div className="h-3 w-full overflow-hidden rounded-sm border border-cyan-700/50 bg-slate-800/80">
-      <div
-        className="h-full bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.9)]"
-        style={{ width: `${Math.max(value, 2)}%` }}
-      />
-    </div>
-  );
-}
 
 function ObjectiveRow({
   label,
@@ -103,15 +98,6 @@ function getTextProperty(properties: any, propertyName: string) {
   return "";
 }
 
-function getCurrentWeekStart() {
-  const now = new Date();
-  const day = now.getDay(); // Sunday = 0
-  const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - day);
-  weekStart.setHours(0, 0, 0, 0);
-  return weekStart;
-}
-
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -130,26 +116,9 @@ export default async function CommandHudPage() {
 
   const currentCampaign = "Spartan Candidate Program";
   const campaignStart = "2026-06-21";
-
-  function toNoonUtc(dateString: string) {
-    return new Date(`${dateString}T12:00:00.000Z`);
-  }
-
-  const denverToday = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Denver",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-
-  const campaignDay =
-    Math.floor(
-      (toNoonUtc(denverToday).getTime() -
-        toNoonUtc(campaignStart).getTime()) /
-        86400000
-    ) + 1;
-
-  const weekStart = getCurrentWeekStart();
+  const today = getOperationalDateKey();
+  const campaignDay = differenceInDateKeys(campaignStart, today) + 1;
+  const { startDateKey: weekStart } = getOperationalWeekRange(new Date(), 0);
   const weeklyOps = (await getOrCreateWeeklyOperations(weekStart)) as any;
   const weeklyProps = weeklyOps.properties;
   const weeklyPageId = weeklyOps.id;
@@ -180,7 +149,7 @@ export default async function CommandHudPage() {
     "Campaign Medal Pace"
   );
 
-    const currentHour = new Date().getHours();
+    const currentHour = getOperationalHour();
     const hudBackground =
       currentHour >= 5 && currentHour < 8
         ? "/images/hud-obstacle-course-5.png"
@@ -234,18 +203,6 @@ export default async function CommandHudPage() {
 
               <div className="absolute inset-0 bg-black/20" />
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_35%,rgba(0,0,0,0.65)_100%)]" />
-
-              <div className="absolute left-1/2 top-8 z-10 w-[40%] -translate-x-1/2">
-                <div className="text-center">
-                  <p className="mb-2 text-xs uppercase tracking-[0.35em] text-cyan-300">
-                    Shield Integrity
-                  </p>
-                  <ProgressBar value={100} />
-                  <p className="mt-1 text-xs uppercase tracking-[0.25em] text-cyan-100">
-                    100% · Systems Online
-                  </p>
-                </div>
-              </div>
 
                 <div className="absolute left-8 top-6 z-10">
                 <p className="text-xl font-bold tracking-[0.2em] text-cyan-100">

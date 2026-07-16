@@ -1,4 +1,5 @@
 import { notion } from "@/lib/notion";
+import { addDaysToDateKey, getOperationalDateKey } from "@/lib/date";
 
 type AchievementTrack = "Persistence" | "Discipline" | "Classified";
 
@@ -34,23 +35,19 @@ function calculateCurrentDailyStreak(dateStrings: string[]): number {
   const completed = new Set(dateStrings);
 
   let streak = 0;
-  let cursor = new Date(getDenverDateString() + "T00:00:00");
+  let cursor = getOperationalDateKey();
 
-  const todayKey = cursor.toISOString().slice(0, 10);
-
-  if (!completed.has(todayKey)) {
-    cursor.setDate(cursor.getDate() - 1);
+  if (!completed.has(cursor)) {
+    cursor = addDaysToDateKey(cursor, -1);
   }
 
   while (true) {
-    const dateKey = cursor.toISOString().slice(0, 10);
-
-    if (!completed.has(dateKey)) {
+    if (!completed.has(cursor)) {
       break;
     }
 
     streak += 1;
-    cursor.setDate(cursor.getDate() - 1);
+    cursor = addDaysToDateKey(cursor, -1);
   }
 
   return streak;
@@ -147,12 +144,6 @@ async function awardAchievement(achievementId: string, date: string) {
   });
 }
 
-function getDenverDateString() {
-  return new Date().toLocaleDateString("en-CA", {
-    timeZone: "America/Denver",
-  });
-}
-
 function mapAchievement(raw: any): Achievement {
   const props = raw.properties;
 
@@ -176,7 +167,7 @@ function mapAchievement(raw: any): Achievement {
 }
 
 export async function evaluateAchievements() {
-  const today = getDenverDateString();
+  const today = getOperationalDateKey();
   const achievements = await getUnearnedAchievements();
 
   const awarded: string[] = [];

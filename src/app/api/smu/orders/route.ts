@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { Client } from "@notionhq/client";
+import { addDaysToDateKey, getOperationalDateKey } from "@/lib/date";
 
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
 export const dynamic = "force-dynamic";
@@ -70,33 +71,6 @@ function isComplete(item: OrderItem) {
     return ["Done", "Complete", "Completed"].includes(item.status);
 }
 
-function toDateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-function isOverdue(item: OrderItem, today: Date) {
-  if (!item.dueDate) return false;
-
-  const dueDateOnly = item.dueDate.split("T")[0];
-  const todayDateOnly = toDateKey(today);
-
-  return dueDateOnly < todayDateOnly && !isComplete(item);
-}
-
-function isDueSoon(item: OrderItem, today: Date) {
-    if (!item.dueDate || isComplete(item) || item.focusQueue) return false;
-
-    const due = new Date(item.dueDate);
-    const soon = new Date(today);
-    soon.setDate(soon.getDate() + 3);
-
-    return due >= today && due <= soon;
-}
-
 function getNumberProperty(properties: any, propertyName: string) {
   const property = properties[propertyName];
 
@@ -162,13 +136,8 @@ export async function GET() {
             throw new Error("Missing ASSIGNMENTS_DATA_SOURCE_ID");
         }
 
-        const now = new Date();
-        const todayStart = new Date(now);
-        todayStart.setHours(0, 0, 0, 0);
-
-        const dueSoonEnd = new Date(todayStart);
-        dueSoonEnd.setDate(dueSoonEnd.getDate() + 3);
-        dueSoonEnd.setHours(23, 59, 59, 999);
+        const today = getOperationalDateKey();
+        const dueSoonEnd = addDaysToDateKey(today, 3);
 
         const focusResponse = await notion.dataSources.query({
             data_source_id: databaseId,
@@ -198,13 +167,13 @@ export async function GET() {
                     {
                         property: "Due Date",
                         date: {
-                            on_or_after: todayStart.toISOString(),
+                            on_or_after: today,
                         },
                     },
                     {
                         property: "Due Date",
                         date: {
-                            on_or_before: dueSoonEnd.toISOString(),
+                            on_or_before: dueSoonEnd,
                         },
                     },
                     {
@@ -231,7 +200,7 @@ export async function GET() {
                     {
                         property: "Due Date",
                         date: {
-                            before: todayStart.toISOString(),
+                            before: today,
                         },
                     },
                     {
@@ -252,10 +221,7 @@ export async function GET() {
             if (!a.dueDate) return 1;
             if (!b.dueDate) return -1;
 
-            return (
-                new Date(a.dueDate).getTime() -
-                new Date(b.dueDate).getTime()
-            );
+            return a.dueDate.localeCompare(b.dueDate);
         });
 
         const dueSoon = await Promise.all(
@@ -265,10 +231,7 @@ export async function GET() {
             if (!a.dueDate) return 1;
             if (!b.dueDate) return -1;
 
-            return (
-                new Date(a.dueDate).getTime() -
-                new Date(b.dueDate).getTime()
-            );
+            return a.dueDate.localeCompare(b.dueDate);
         });
 
         const overdue = await Promise.all(
@@ -278,10 +241,7 @@ export async function GET() {
             if (!a.dueDate) return 1;
             if (!b.dueDate) return -1;
 
-            return (
-                new Date(a.dueDate).getTime() -
-                new Date(b.dueDate).getTime()
-            );
+            return a.dueDate.localeCompare(b.dueDate);
         });
 
         const priorityWeight = (priority: string) => {
@@ -334,10 +294,7 @@ export async function GET() {
             if (!a.dueDate) return 1;
             if (!b.dueDate) return -1;
 
-            return (
-                new Date(a.dueDate).getTime() -
-                new Date(b.dueDate).getTime()
-            );
+            return a.dueDate.localeCompare(b.dueDate);
         });
 
         const focusQueueIds = new Set(

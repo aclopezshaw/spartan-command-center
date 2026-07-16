@@ -1,4 +1,8 @@
 import { Client } from "@notionhq/client";
+import {
+  addDaysToDateKey,
+  getOperationalDateKey,
+} from "@/lib/date";
 
 export const notion = new Client({
   auth: process.env.NOTION_TOKEN,
@@ -39,12 +43,7 @@ export async function getTodaySitrep() {
     throw new Error("Missing DAILY_SITREP_DATABASE_ID");
   }
 
-  const today = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Denver",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
+  const today = getOperationalDateKey();
 
   const response = await notion.dataSources.query({
     data_source_id: databaseId,
@@ -109,15 +108,14 @@ export async function updateDailySitrepCheckbox(
   });
 }
 
-export async function getWorkoutCountForWeek(weekStart: Date) {
+export async function getWorkoutCountForWeek(weekStart: string) {
   const databaseId = process.env.WORKOUT_LOG_DATABASE_ID;
 
   if (!databaseId) {
     throw new Error("Missing WORKOUT_LOG_DATABASE_ID");
   }
 
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 7);
+  const weekEnd = addDaysToDateKey(weekStart, 7);
 
   const response = await notion.dataSources.query({
     data_source_id: databaseId,
@@ -126,13 +124,13 @@ export async function getWorkoutCountForWeek(weekStart: Date) {
         {
           property: "Date",
           date: {
-            on_or_after: weekStart.toISOString().split("T")[0],
+            on_or_after: weekStart,
           },
         },
         {
           property: "Date",
           date: {
-            before: weekEnd.toISOString().split("T")[0],
+            before: weekEnd,
           },
         },
       ],
@@ -143,7 +141,7 @@ export async function getWorkoutCountForWeek(weekStart: Date) {
 }
 
 export async function getCurrentWeeklyOperations(
-  weekStart: Date
+  weekStart: string
 ) {
   const databaseId = process.env.WEEKLY_OPERATIONS_DATABASE_ID;
 
@@ -151,14 +149,12 @@ export async function getCurrentWeeklyOperations(
     throw new Error("Missing WEEKLY_OPERATIONS_DATABASE_ID");
   }
 
-  const weekStartString = weekStart.toISOString().split("T")[0];
-
   const response = await notion.dataSources.query({
     data_source_id: databaseId,
     filter: {
       property: "Week Start",
       date: {
-        equals: weekStartString,
+        equals: weekStart,
       },
     },
   });
@@ -167,7 +163,7 @@ export async function getCurrentWeeklyOperations(
 }
 
 export async function getOrCreateWeeklyOperations(
-  weekStart: Date
+  weekStart: string
 ) {
   const existing = await getCurrentWeeklyOperations(
     weekStart
@@ -181,8 +177,6 @@ export async function getOrCreateWeeklyOperations(
     throw new Error("Missing WEEKLY_OPERATIONS_DATABASE_ID");
   }
 
-  const weekStartString = weekStart.toISOString().split("T")[0];
-
   const page = await notion.pages.create({
     parent: {
       data_source_id: databaseId,
@@ -190,7 +184,7 @@ export async function getOrCreateWeeklyOperations(
     properties: {
       "Week Start": {
         date: {
-          start: weekStartString,
+          start: weekStart,
         },
       },
 
