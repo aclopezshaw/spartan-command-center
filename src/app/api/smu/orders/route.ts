@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { Client } from "@notionhq/client";
-import { addDaysToDateKey, getOperationalDateKey } from "@/lib/date";
+import {
+    addDaysToDateKey,
+    getOperationalDateBounds,
+    getOperationalDateKey,
+    getOperationalDateKeyFromValue,
+} from "@/lib/date";
 
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
 export const dynamic = "force-dynamic";
@@ -137,7 +142,11 @@ export async function GET() {
         }
 
         const today = getOperationalDateKey();
-        const dueSoonEnd = addDaysToDateKey(today, 3);
+        const dueSoonEndExclusiveDateKey = addDaysToDateKey(today, 4);
+        const { start: todayStart } = getOperationalDateBounds(today);
+        const { start: dueSoonEndExclusive } = getOperationalDateBounds(
+            dueSoonEndExclusiveDateKey
+        );
 
         const focusResponse = await notion.dataSources.query({
             data_source_id: databaseId,
@@ -173,7 +182,7 @@ export async function GET() {
                     {
                         property: "Due Date",
                         date: {
-                            on_or_before: dueSoonEnd,
+                            before: dueSoonEndExclusive.toISOString(),
                         },
                     },
                     {
@@ -200,7 +209,7 @@ export async function GET() {
                     {
                         property: "Due Date",
                         date: {
-                            before: today,
+                            before: todayStart.toISOString(),
                         },
                     },
                     {
@@ -224,9 +233,17 @@ export async function GET() {
             return a.dueDate.localeCompare(b.dueDate);
         });
 
-        const dueSoon = await Promise.all(
+        const dueSoon = (await Promise.all(
             dueSoonResponse.results.map(normalizeAssignment)
-        );
+        )).filter((item) => {
+            if (!item.dueDate) return false;
+
+            const dueDateKey = getOperationalDateKeyFromValue(item.dueDate);
+            return (
+                dueDateKey >= today &&
+                dueDateKey < dueSoonEndExclusiveDateKey
+            );
+        });
         dueSoon.sort((a, b) => {
             if (!a.dueDate) return 1;
             if (!b.dueDate) return -1;
@@ -234,9 +251,13 @@ export async function GET() {
             return a.dueDate.localeCompare(b.dueDate);
         });
 
-        const overdue = await Promise.all(
+        const overdue = (await Promise.all(
             overdueResponse.results.map(normalizeAssignment)
-        );
+        )).filter((item) => {
+            if (!item.dueDate) return false;
+
+            return getOperationalDateKeyFromValue(item.dueDate) < today;
+        });
         overdue.sort((a, b) => {
             if (!a.dueDate) return 1;
             if (!b.dueDate) return -1;

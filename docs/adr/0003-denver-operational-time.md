@@ -75,7 +75,7 @@ Rejected because America/Denver observes daylight-saving transitions.
 
 ## Implementation status
 
-**Implemented.** `src/lib/date.ts` owns the America/Denver timezone constant, date keys, current hour, calendar arithmetic, DST-safe day boundaries, and explicit week ranges. The Command HUD, Daily SITREP, Weekly Operations, achievements, hydration, and Academic Operations routes consume those helpers. Absolute creation and history timestamps remain UTC ISO instants.
+**Implemented.** `src/lib/date.ts` owns the America/Denver timezone constant, date keys, Notion date-value normalization, current hour, calendar arithmetic, DST-safe date and day boundaries, and explicit week ranges. The Command HUD, Daily SITREP, Weekly Operations, achievements, hydration, and Academic Operations routes consume those helpers. SMU due-soon and overdue queries use Denver-midnight instants so timed Sunday deadlines are not shifted beyond the operational window by UTC conversion. Absolute creation and history timestamps remain UTC ISO instants.
 
 ## Validation
 
@@ -83,6 +83,7 @@ Rejected because America/Denver observes daylight-saving transitions.
 - Operational day bounds span 23, 24, or 25 hours as required by DST.
 - Deployment-local and browser-local timezones do not change operational results.
 - Date-only Notion fields use Denver date keys; actual event moments use UTC ISO timestamps.
+- Timed Notion assignment deadlines are classified by their America/Denver calendar date after broad instant-boundary queries.
 - Every weekly consumer passes an explicit Sunday or Monday convention.
 
 ## Reconsideration triggers

@@ -81,6 +81,20 @@ export function getOperationalDateKey(date = new Date()) {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+export function getOperationalDateKeyFromValue(value: string) {
+  if (DATE_KEY_PATTERN.test(value)) {
+    return value;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`Invalid operational date value: ${value}`);
+  }
+
+  return getOperationalDateKey(date);
+}
+
 export function getOperationalHour(date = new Date()) {
   return getDateTimeParts(date).hour;
 }
@@ -107,8 +121,7 @@ export function differenceInDateKeys(startDateKey: string, endDateKey: string) {
   return Math.floor((end.getTime() - start.getTime()) / 86_400_000);
 }
 
-export function getOperationalDayBounds(date = new Date()) {
-  const dateKey = getOperationalDateKey(date);
+export function getOperationalDateBounds(dateKey: string) {
   const nextDateKey = addDaysToDateKey(dateKey, 1);
 
   return {
@@ -116,6 +129,10 @@ export function getOperationalDayBounds(date = new Date()) {
     start: operationalDateTimeToInstant(dateKey),
     endExclusive: operationalDateTimeToInstant(nextDateKey),
   };
+}
+
+export function getOperationalDayBounds(date = new Date()) {
+  return getOperationalDateBounds(getOperationalDateKey(date));
 }
 
 export function getOperationalWeekRange(
