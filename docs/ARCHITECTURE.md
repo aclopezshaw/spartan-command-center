@@ -83,11 +83,11 @@ This fragmentation is current implementation and documented technical debt, not 
 
 1. `TrainingReportsPage.submitHydration` posts an amount to `/api/hydration-log`.
 2. The Route Handler creates a Notion Hydration Log page.
-3. It aggregates the current server-local day.
+3. It aggregates the current America/Denver operational day using DST-safe UTC query boundaries from `src/lib/date.ts`.
 4. At 96 ounces, it updates the current Denver-dated SITREP Water checkbox.
 5. The page reloads `/api/hydration-total`.
 
-The mix of Denver record selection and server-local aggregation is the conflict captured by proposed [ADR-0003](adr/0003-denver-operational-time.md).
+Daily record selection and hydration aggregation now share the America/Denver operational calendar accepted in [ADR-0003](adr/0003-denver-operational-time.md).
 
 ### Event completion
 

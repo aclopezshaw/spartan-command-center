@@ -299,7 +299,7 @@ The following decisions still require explicit approval:
 3. Numeric 0.9 competency evidence requirements, mapping policy, curriculum content, evaluation scoring, and remediation thresholds within the approved overlay architecture.
 4. Minor 0.7.2 Field Exercise refinement after milestone 0.6 is complete.
 5. Numeric Shield recharge weights and caps; Mission Intel evidence windows, scoring thresholds, reveal percentages, and no-assignment fallback; campaign-scaled readiness thresholds; checkpoint damage values; first-campaign content; and skill-point economics within the approved 1.0 architecture.
-6. Whether proposed ADR-0003 becomes Accepted and which week-start convention accompanies Denver time.
+6. Whether Weekly Operations and Academic Operations should retain distinct explicit week-start conventions or converge on one convention.
 7. The durable identity and multi-user model beyond ALEX-225.
 8. Which Notion database and data-source contracts are canonical.
 9. The long-term relationship between web and mobile clients.
