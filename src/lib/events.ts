@@ -7,8 +7,7 @@ export function getEventStatus(
 ): EventStatus {
   if (completedEventIds.includes(event.id)) return "completed";
   if (campaignDay < event.unlockDay) return "upcoming";
-  if (campaignDay === event.unlockDay) return "active";
-  return "completed";
+  return "active";
 }
 
 export function getActiveEvent(
@@ -28,4 +27,8 @@ export function getNextEvent(
     .filter((event) => !completedEventIds.includes(event.id))
     .filter((event) => event.unlockDay > campaignDay)
     .sort((a, b) => a.unlockDay - b.unlockDay)[0];
+}
+
+export function areAllCampaignEventsComplete(completedEventIds: string[] = []) {
+  return eventCatalog.every((event) => completedEventIds.includes(event.id));
 }

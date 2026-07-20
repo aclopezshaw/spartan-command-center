@@ -9,6 +9,8 @@ import {
   getNotionClient,
   getRequiredNotionId,
 } from "@/lib/notion-client";
+import { ReadinessScores } from "@/data/events";
+import { eventCatalog } from "@/data/events";
 
 type ServiceHistoryEntry = {
   eventTitle: string;
@@ -21,6 +23,173 @@ type ServiceHistoryEntry = {
   campaignPageId?: string | null;
   completedAt?: string;
 };
+
+type CampaignEventPage = {
+  id: string;
+  title: string;
+  isCompleted: boolean;
+};
+
+type NumberProperty = { number?: number | null };
+type NotionProperties = Record<string, NumberProperty | undefined>;
+type EventQueryResult = {
+  id: string;
+  properties: {
+    "Event Name"?: { title?: Array<{ plain_text?: string }> };
+    Status?: { select?: { name?: string } | null };
+  };
+};
+
+function getNumberProperty(properties: NotionProperties, name: string) {
+  return properties[name]?.number ?? 0;
+}
+
+async function getServiceHistoryDataSourceId() {
+  const notion = getNotionClient();
+  const databaseId = getRequiredNotionId("SERVICE_HISTORY_DATABASE_ID");
+  const database = await notion.databases.retrieve({ database_id: databaseId });
+  const dataSourceId = (database as unknown as { data_sources?: Array<{ id: string }> })
+    .data_sources?.[0]?.id;
+
+  if (!dataSourceId) {
+    throw new Error("Service History data source not found");
+  }
+
+  return dataSourceId;
+}
+
+export async function findCampaignEvent(eventId: string): Promise<CampaignEventPage | null> {
+  const notion = getNotionClient();
+  const dataSourceId = getRequiredNotionId("EVENTS_DATABASE_ID");
+  const response = await notion.dataSources.query({
+    data_source_id: dataSourceId,
+    filter: {
+      property: "Event ID",
+      rich_text: { equals: eventId },
+    },
+    page_size: 1,
+  });
+  const catalogEvent = eventCatalog.find((event) => event.id === eventId);
+  const fallbackResponse =
+    response.results.length === 0 && catalogEvent
+      ? await notion.dataSources.query({
+          data_source_id: dataSourceId,
+          filter: {
+            property: "Event Name",
+            title: { equals: catalogEvent.title },
+          },
+          page_size: 1,
+        })
+      : response;
+  const event = fallbackResponse.results[0] as unknown as EventQueryResult | undefined;
+
+  if (!event) return null;
+
+  return {
+    id: event.id,
+    title: event.properties["Event Name"]?.title?.[0]?.plain_text ?? eventId,
+    isCompleted: event.properties.Status?.select?.name === "Defeated",
+  };
+}
+
+async function hasServiceHistoryForEvent(eventPageId: string) {
+  const notion = getNotionClient();
+  const dataSourceId = await getServiceHistoryDataSourceId();
+  const response = await notion.dataSources.query({
+    data_source_id: dataSourceId,
+    filter: {
+      property: "Related Event",
+      relation: { contains: eventPageId },
+    },
+    page_size: 1,
+  });
+
+  return response.results.length > 0;
+}
+
+export async function isCampaignEventCompleted(eventPage: CampaignEventPage) {
+  return eventPage.isCompleted || hasServiceHistoryForEvent(eventPage.id);
+}
+
+export async function markCampaignEventFailed(eventPageId: string) {
+  await getNotionClient().pages.update({
+    page_id: eventPageId,
+    properties: {
+      Status: { select: { name: "Failed" } },
+    },
+  });
+}
+
+export async function getCompletedCampaignEventIds(eventIds: string[]) {
+  const events = await Promise.all(
+    eventIds.map(async (eventId) => ({
+      eventId,
+      event: await findCampaignEvent(eventId),
+    }))
+  );
+  const completed = await Promise.all(
+    events.map(async ({ eventId, event }) => {
+      if (!event) return { eventId, completed: false };
+      return { eventId, completed: await isCampaignEventCompleted(event) };
+    })
+  );
+
+  return completed
+    .filter((event) => event.completed)
+    .map((event) => event.eventId);
+}
+
+export async function getAlexReadinessScores(): Promise<ReadinessScores> {
+  const serviceRecord = await getAlexServiceRecord();
+  if (!serviceRecord) {
+    throw new Error("Service Record not found for ALEX-225");
+  }
+
+  const properties = (serviceRecord as unknown as { properties?: NotionProperties })
+    .properties ?? {};
+  return {
+    physical: getNumberProperty(properties, "Physical Readiness"),
+    recovery: getNumberProperty(properties, "Recovery Readiness"),
+    intelligence: getNumberProperty(properties, "Intelligence Readiness"),
+    professional: getNumberProperty(properties, "Professional Readiness"),
+  };
+}
+
+export async function completeCampaignEvent({
+  eventPageId,
+  eventTitle,
+  eventType,
+  campaignDay,
+  xpReward,
+  description,
+  serviceRecordPageId,
+  campaignPageId,
+}: ServiceHistoryEntry & { eventPageId: string }) {
+  if (await hasServiceHistoryForEvent(eventPageId)) {
+    return { alreadyCompleted: true };
+  }
+
+  await createServiceHistoryEntry({
+    eventTitle,
+    eventType,
+    campaignDay,
+    xpReward,
+    description,
+    eventPageId,
+    serviceRecordPageId,
+    campaignPageId,
+  });
+
+  await getNotionClient().pages.update({
+    page_id: eventPageId,
+    properties: {
+      Status: { select: { name: "Defeated" } },
+      "Date Completed": { date: { start: new Date().toISOString() } },
+    },
+  });
+
+  return { alreadyCompleted: false };
+}
 
 async function findAlexServiceRecord() {
   const notion = getNotionClient();
@@ -125,7 +294,7 @@ export async function getTodaySitrep() {
         ],
       },
     },
-  } as any);
+  } as never);
 }
 
 export async function getHydrationTotalForOperationalDay(date = new Date()) {
@@ -155,8 +324,10 @@ export async function getHydrationTotalForOperationalDay(date = new Date()) {
     },
   });
 
-  return response.results.reduce((sum, page: any) => {
-    return sum + (page.properties.Amount?.number ?? 0);
+  return response.results.reduce((sum, page) => {
+    const properties = (page as unknown as { properties?: NotionProperties })
+      .properties ?? {};
+    return sum + getNumberProperty(properties, "Amount");
   }, 0);
 }
 

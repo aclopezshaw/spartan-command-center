@@ -1,4 +1,20 @@
-export type EventStatus = "locked" | "upcoming" | "active" | "completed";
+export type EventStatus = "upcoming" | "active" | "completed";
+
+export type ReadinessKey =
+  | "physical"
+  | "recovery"
+  | "intelligence"
+  | "professional";
+
+export type ReadinessScores = Record<ReadinessKey, number>;
+
+export type EventReadinessRequirements = {
+  minimums?: Partial<ReadinessScores>;
+  atLeastOne?: {
+    keys: ReadinessKey[];
+    minimum: number;
+  };
+};
 
 export type SpartanEvent = {
   id: string;
@@ -10,6 +26,7 @@ export type SpartanEvent = {
   buttonText: string;
   backgroundImage?: string;
   xpReward?: number;
+  readinessRequirements?: EventReadinessRequirements;
 };
 
 export const eventCatalog: SpartanEvent[] = [
@@ -35,6 +52,9 @@ export const eventCatalog: SpartanEvent[] = [
     buttonText: "Begin PRT",
     backgroundImage: "/images/events/prt.png",
     xpReward: 250,
+    readinessRequirements: {
+      minimums: { physical: 1 },
+    },
   },
   {
     id: "academic-aptitude-examination",
@@ -47,6 +67,9 @@ export const eventCatalog: SpartanEvent[] = [
     buttonText: "Take Exam",
     backgroundImage: "/images/events/academic-aptitude-examination.png",
     xpReward: 250,
+    readinessRequirements: {
+      minimums: { intelligence: 1 },
+    },
   },
 
   {
@@ -60,5 +83,17 @@ export const eventCatalog: SpartanEvent[] = [
     buttonText: "Begin Exercise",
     backgroundImage: "/images/events/final-field-training-exercise.png",
     xpReward: 500,
+    readinessRequirements: {
+      minimums: {
+        physical: 1,
+        recovery: 1,
+        intelligence: 1,
+        professional: 1,
+      },
+      atLeastOne: {
+        keys: ["physical", "recovery", "intelligence", "professional"],
+        minimum: 2,
+      },
+    },
   }
 ];

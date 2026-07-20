@@ -1,73 +1,83 @@
 import { NextResponse } from "next/server";
+import { eventCatalog } from "@/data/events";
+import { evaluateEventReadiness } from "@/lib/event-readiness";
 import {
-  createServiceHistoryEntry,
+  completeCampaignEvent,
+  findCampaignEvent,
+  getAlexReadinessScores,
   getAlexServiceRecordPageId,
+  isCampaignEventCompleted,
+  markCampaignEventFailed,
 } from "@/lib/notion";
-import { getNotionClient } from "@/lib/notion-client";
 
-async function findEventPageId(eventId: string) {
-  const notion = getNotionClient();
-  const dataSourceId = process.env.EVENTS_DATA_SOURCE_ID;
-
-  if (!dataSourceId) return null;
-
-  const response = await notion.dataSources.query({
-    data_source_id: dataSourceId,
-    filter: {
-      property: "Event ID",
-      rich_text: {
-        equals: eventId,
-      },
-    },
-    page_size: 1,
-  });
-
-  return response.results[0]?.id ?? null;
-}
+type CompleteEventRequest = {
+  eventId?: unknown;
+  campaignDay?: unknown;
+};
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const body = (await request.json()) as CompleteEventRequest;
+    const eventId = typeof body.eventId === "string" ? body.eventId : null;
+    const campaignDay =
+      typeof body.campaignDay === "number" && Number.isInteger(body.campaignDay)
+        ? body.campaignDay
+        : null;
 
-    const {
-      eventTitle,
-      eventType,
-      campaignDay,
-      xpReward,
-      campaignPageId,
-      description,
-    } = body;
+    if (!eventId || !campaignDay || campaignDay < 1) {
+      return NextResponse.json({ error: "Invalid event completion request" }, { status: 400 });
+    }
 
-    const resolvedEventPageId = await findEventPageId(body.eventId);
-    const serviceRecordPageId = await getAlexServiceRecordPageId();
+    const event = eventCatalog.find((candidate) => candidate.id === eventId);
+    if (!event) {
+      return NextResponse.json({ error: "Unknown campaign event" }, { status: 404 });
+    }
 
-    const databaseId = process.env.SERVICE_HISTORY_DATABASE_ID;
+    if (campaignDay < event.unlockDay) {
+      return NextResponse.json({ error: "Event is not available yet" }, { status: 409 });
+    }
 
-    if (!databaseId) {
+    const eventPage = await findCampaignEvent(event.id);
+    if (!eventPage) {
+      console.error("Campaign event record not found", { eventId: event.id });
+      return NextResponse.json({ error: "Campaign event record not found" }, { status: 500 });
+    }
+
+    if (await isCampaignEventCompleted(eventPage)) {
+      return NextResponse.json({ ok: true, eventId: event.id, alreadyCompleted: true });
+    }
+
+    const readiness = await getAlexReadinessScores();
+    const evaluation = evaluateEventReadiness(event.readinessRequirements, readiness);
+    if (!evaluation.eligible) {
+      await markCampaignEventFailed(eventPage.id);
       return NextResponse.json(
-        { error: "Missing SERVICE_HISTORY_DATABASE_ID" },
-        { status: 500 }
+        {
+          error: "Event failed readiness review. Update readiness and retry.",
+          unmetRequirements: evaluation.unmetRequirements,
+        },
+        { status: 422 }
       );
     }
 
-    await createServiceHistoryEntry({
-      eventTitle,
-      eventType,
+    const serviceRecordPageId = await getAlexServiceRecordPageId();
+    const result = await completeCampaignEvent({
+      eventPageId: eventPage.id,
+      eventTitle: event.title,
+      eventType: event.type,
       campaignDay,
-      xpReward,
-      description,
-      eventPageId: resolvedEventPageId,
+      xpReward: event.xpReward ?? (event.type === "Major Event" ? 500 : 250),
+      description: event.prompt,
       serviceRecordPageId,
-      campaignPageId,
     });
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({
+      ok: true,
+      eventId: event.id,
+      alreadyCompleted: result.alreadyCompleted,
+    });
   } catch (error) {
-    console.error("Failed to complete event:", error);
-
-    return NextResponse.json(
-      { error: "Failed to complete event" },
-      { status: 500 }
-    );
+    console.error("Failed to complete event", error);
+    return NextResponse.json({ error: "Unable to save event completion. Please try again." }, { status: 500 });
   }
 }
