@@ -31,11 +31,37 @@ type PipelineCourse = {
     weekTotal: number;
     quarterComplete: number;
     quarterTotal: number;
+    weekRequiredTotal: number;
+    weekRequiredComplete: number;
+    weekOptionalTotal: number;
+    weekOptionalComplete: number;
+    quarterRequiredTotal: number;
+    quarterRequiredComplete: number;
+    quarterOptionalTotal: number;
+    quarterOptionalComplete: number;
+    overdueCount: number;
+    skippedCount: number;
+    nextExam: string | null;
+    weekMinutes: number;
+    weekOptionalMinutes: number;
+    weekRequiredMinutes: number;
     next: string;
 };
 
 type PipelineResponse = {
     pipeline: PipelineCourse[];
+};
+
+type QuarterSummary = {
+    name: string;
+    credits: number;
+    startDate: string | null;
+    endDate: string | null;
+};
+
+type QuarterResponse = {
+    active: QuarterSummary | null;
+    upNext: QuarterSummary | null;
 };
 
 function getCourseName(courseCode: string) {
@@ -51,13 +77,17 @@ function getCourseName(courseCode: string) {
 
 function Panel({
     title,
+    className = "",
     children,
 }: {
     title: string;
+    className?: string;
     children: React.ReactNode;
 }) {
     return (
-        <section className="border border-cyan-700/50 bg-black/60 p-5">
+        <section
+            className={`border border-cyan-700/50 bg-black/60 p-5 ${className}`}
+        >
             <p className="text-xs uppercase tracking-[0.3em] text-cyan-400">
                 {title}
             </p>
@@ -66,13 +96,44 @@ function Panel({
     );
 }
 
-function ProgressBar({ value }: { value: number }) {
+function ProgressBar({
+    requiredTotal,
+    requiredComplete,
+    optionalTotal,
+    optionalComplete,
+}: {
+    requiredTotal: number;
+    requiredComplete: number;
+    optionalTotal: number;
+    optionalComplete: number;
+}) {
+    const total = requiredTotal + optionalTotal;
+    const requiredWidth = total ? (requiredTotal / total) * 100 : 0;
+    const requiredFill = total ? (requiredComplete / total) * 100 : 0;
+    const optionalFill = total ? (optionalComplete / total) * 100 : 0;
+
     return (
-        <div className="mt-2 h-2 w-full overflow-hidden rounded-sm border border-cyan-700/50 bg-slate-800">
+        <div
+            className="relative mt-2 h-2 w-full overflow-hidden rounded-sm border border-cyan-700/50 bg-slate-800"
+            aria-label={`${requiredComplete} of ${requiredTotal} required assignments and ${optionalComplete} of ${optionalTotal} optional assignments completed`}
+        >
             <div
-                className="h-full bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.8)]"
-                style={{ width: `${value}%` }}
+                className="absolute inset-y-0 left-0 bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.8)]"
+                style={{ width: `${requiredFill}%` }}
             />
+            <div
+                className="absolute inset-y-0 bg-white"
+                style={{
+                    left: `${requiredWidth}%`,
+                    width: `${optionalFill}%`,
+                }}
+            />
+            {requiredTotal > 0 && optionalTotal > 0 && (
+                <div
+                    className="absolute inset-y-0 w-px bg-slate-300/80 shadow-[0_0_4px_rgba(255,255,255,0.8)]"
+                    style={{ left: `${requiredWidth}%` }}
+                />
+            )}
         </div>
     );
 }
@@ -80,23 +141,35 @@ function ProgressBar({ value }: { value: number }) {
 function CourseRow({
     code,
     name,
-    weekProgress,
-    quarterProgress,
     next,
     weekComplete,
     weekTotal,
     quarterComplete,
     quarterTotal,
+    weekRequiredTotal,
+    weekRequiredComplete,
+    weekOptionalTotal,
+    weekOptionalComplete,
+    quarterRequiredTotal,
+    quarterRequiredComplete,
+    quarterOptionalTotal,
+    quarterOptionalComplete,
 }: {
     code: string;
     name: string;
-    weekProgress: number;
-    quarterProgress: number;
     next: string;
     weekComplete: number;
     weekTotal: number;
     quarterComplete: number;
     quarterTotal: number;
+    weekRequiredTotal: number;
+    weekRequiredComplete: number;
+    weekOptionalTotal: number;
+    weekOptionalComplete: number;
+    quarterRequiredTotal: number;
+    quarterRequiredComplete: number;
+    quarterOptionalTotal: number;
+    quarterOptionalComplete: number;
 }) {
     return (
         <div className="border-b border-cyan-900/60 pb-4 last:border-b-0 last:pb-0">
@@ -116,7 +189,12 @@ function CourseRow({
                         <span>This Week</span>
                         <span>{weekComplete} / {weekTotal}</span>
                     </div>
-                    <ProgressBar value={weekProgress} />
+                    <ProgressBar
+                        requiredTotal={weekRequiredTotal}
+                        requiredComplete={weekRequiredComplete}
+                        optionalTotal={weekOptionalTotal}
+                        optionalComplete={weekOptionalComplete}
+                    />
                 </div>
 
                 <div>
@@ -124,7 +202,12 @@ function CourseRow({
                         <span>Quarter</span>
                         <span>{quarterComplete} / {quarterTotal}</span>
                     </div>
-                    <ProgressBar value={quarterProgress} />
+                    <ProgressBar
+                        requiredTotal={quarterRequiredTotal}
+                        requiredComplete={quarterRequiredComplete}
+                        optionalTotal={quarterOptionalTotal}
+                        optionalComplete={quarterOptionalComplete}
+                    />
                 </div>
             </div>
         </div>
@@ -242,6 +325,8 @@ export default function MedicalUnitPage() {
     const [pipeline, setPipeline] = useState<PipelineCourse[]>([]);
     const [focusingAssignmentId, setFocusingAssignmentId] = useState<string | null>(null);
     const [focusError, setFocusError] = useState<string | null>(null);
+    const [quarter, setQuarter] = useState<QuarterSummary | null>(null);
+    const [nextQuarter, setNextQuarter] = useState<QuarterSummary | null>(null);
 
     async function loadOrders() {
         const response = await fetch("/api/smu/orders");
@@ -258,9 +343,24 @@ export default function MedicalUnitPage() {
         setPipeline(data.pipeline);
     }
 
+    async function loadQuarter() {
+        const response = await fetch("/api/smu/quarter", {
+            cache: "no-store",
+        });
+
+        if (!response.ok) {
+            return;
+        }
+
+        const data: QuarterResponse = await response.json();
+        setQuarter(data.active);
+        setNextQuarter(data.upNext);
+    }
+
     useEffect(() => {
         loadOrders();
         loadPipeline();
+        loadQuarter();
     }, []);
 
     async function completeAssignment(id: string) {
@@ -305,9 +405,15 @@ export default function MedicalUnitPage() {
         }
     }
 
+    const totalWeekMinutes = pipeline.reduce(
+        (total, course) => total + course.weekMinutes,
+        0
+    );
+    const priorityTarget = orders.focusQueue[0] ?? null;
+
     return (
-        <main className="min-h-screen bg-black p-6 font-mono text-slate-100">
-            <div className="mx-auto max-w-7xl space-y-6">
+        <main className="h-screen overflow-y-auto bg-black p-6 font-mono text-slate-100 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="mx-auto max-w-6xl space-y-6">
                 <NavBar />
 
                 <section className="border border-cyan-600/60 bg-slate-950/90 p-6 shadow-[0_0_30px_rgba(8,145,178,0.25)]">
@@ -316,12 +422,35 @@ export default function MedicalUnitPage() {
                         title="Spartan Medical Unit"
                     />
 
-                    <div className="mt-6 grid gap-4 md:grid-cols-6">
-                        <StatBlock label="Quarter" value="Fall '26" />
-                        <StatBlock label="Start Date" value="7/6/26" />
-                        <StatBlock label="End Date" value="999" />
-                        <StatBlock label="Current Credits" value="999" />
-                        <StatBlock label="GPA" value="999" />
+                    <div className="mt-6 grid gap-4 md:grid-cols-5">
+                        <StatBlock
+                            label="Quarter"
+                            value={quarter?.name ?? "Not configured"}
+                        />
+                        <StatBlock
+                            label="Start Date"
+                            value={
+                                quarter?.startDate
+                                    ? formatDueDate(quarter.startDate)
+                                    : "—"
+                            }
+                        />
+                        <StatBlock
+                            label="End Date"
+                            value={
+                                quarter?.endDate
+                                    ? formatDueDate(quarter.endDate)
+                                    : "—"
+                            }
+                        />
+                        <StatBlock
+                            label="Current Credits"
+                            value={
+                                quarter
+                                    ? String(quarter.credits)
+                                    : "—"
+                            }
+                        />
                         <StatBlock label="Est. Graduation" value="Winter '28" />
                     </div>
 
@@ -368,12 +497,34 @@ export default function MedicalUnitPage() {
                                             key={course.course}
                                             code={course.course}
                                             name={getCourseName(course.course)}
-                                            weekProgress={course.weekProgress}
-                                            quarterProgress={course.quarterProgress}
                                             weekComplete={course.weekComplete}
                                             weekTotal={course.weekTotal}
                                             quarterComplete={course.quarterComplete}
                                             quarterTotal={course.quarterTotal}
+                                            weekRequiredTotal={
+                                                course.weekRequiredTotal
+                                            }
+                                            weekRequiredComplete={
+                                                course.weekRequiredComplete
+                                            }
+                                            weekOptionalTotal={
+                                                course.weekOptionalTotal
+                                            }
+                                            weekOptionalComplete={
+                                                course.weekOptionalComplete
+                                            }
+                                            quarterRequiredTotal={
+                                                course.quarterRequiredTotal
+                                            }
+                                            quarterRequiredComplete={
+                                                course.quarterRequiredComplete
+                                            }
+                                            quarterOptionalTotal={
+                                                course.quarterOptionalTotal
+                                            }
+                                            quarterOptionalComplete={
+                                                course.quarterOptionalComplete
+                                            }
                                             next={course.next}
                                         />
                                     ))}
@@ -454,45 +605,68 @@ export default function MedicalUnitPage() {
                             </Panel>
                         </div>
 
-                        <div className="space-y-6">
+                        <div className="flex flex-col space-y-6">
                             <Panel title="Academic Intelligence">
                                 <div className="space-y-3">
-                                    {[
-                                        ["NURS 210", "Stable"],
-                                        ["BIO 201", "Stable"],
-                                        ["MATH 134", "Attention Recommended"],
-                                        ["ENG 121", "Stable"],
-                                    ].map(([course, status]) => (
+                                    {pipeline.map((course) => (
                                         <div
-                                            key={course}
+                                            key={course.course}
                                             className="flex justify-between border-b border-cyan-900/60 pb-2 text-sm last:border-b-0 last:pb-0"
                                         >
                                             <span className="font-bold text-cyan-100">
-                                                {course}
+                                                {course.course}
                                             </span>
-                                            <span className="text-slate-400">
-                                                {status}
+                                            <span className="text-right text-xs">
+                                                <span className="block">
+                                                    <span className="text-red-300">
+                                                        {course.overdueCount} Overdue
+                                                    </span>
+                                                    <span className="text-amber-300">
+                                                        {" "}· {course.skippedCount} Skipped
+                                                    </span>
+                                                </span>
+                                                <span className="mt-1 block text-emerald-300">
+                                                    Next Exam:{" "}
+                                                    {course.nextExam
+                                                        ? formatDueDate(course.nextExam)
+                                                        : "None"}
+                                                </span>
                                             </span>
                                         </div>
                                     ))}
                                 </div>
                             </Panel>
 
-                            <Panel title="Upcoming Clinical Ops">
-                                <div className="space-y-3 text-sm">
-                                    {[
-                                        "Jul 07 — Pharmacology Quiz 2",
-                                        "Jul 11 — Clinical Rotation",
-                                        "Jul 15 — Midterm Exam",
-                                        "Jul 20 — Skills Assessment",
-                                    ].map((item) => (
-                                        <div
-                                            key={item}
-                                            className="border-b border-cyan-900/60 pb-3 text-slate-300 last:border-b-0 last:pb-0"
-                                        >
-                                            {item}
-                                        </div>
-                                    ))}
+                            <Panel title="Study Load Forecast">
+                                <p className="text-3xl font-black text-cyan-300">
+                                    {totalWeekMinutes} min
+                                </p>
+                                <p className="mt-2 text-sm text-slate-400">
+                                    Remaining estimated time for unfinished assignments
+                                    due this week.
+                                </p>
+                                <div className="mt-4 space-y-2 text-xs">
+                                    {pipeline.map((course) => {
+                                        const percent = totalWeekMinutes
+                                            ? Math.round(
+                                                (course.weekMinutes /
+                                                    totalWeekMinutes) *
+                                                    100
+                                            )
+                                            : 0;
+
+                                        return (
+                                            <div
+                                                key={course.course}
+                                                className="flex justify-between border-b border-cyan-900/60 pb-1 text-slate-400"
+                                            >
+                                                <span>{course.course}</span>
+                                                <span className="text-cyan-200">
+                                                    {course.weekMinutes} min · {percent}%
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </Panel>
 
@@ -501,12 +675,19 @@ export default function MedicalUnitPage() {
                                     Priority Target
                                 </p>
                                 <p className="mt-2 text-2xl font-bold text-amber-400">
-                                    MATH 134
+                                    {priorityTarget?.course ?? "No Priority Target"}
                                 </p>
                                 <p className="mt-4 text-sm leading-relaxed text-slate-400">
-                                    Two assignments are due within the next 72
-                                    hours. Current course status is below target
-                                    readiness threshold.
+                                    {priorityTarget
+                                        ? `${orders.focusQueue.length} focused assignment${orders.focusQueue.length === 1 ? "" : "s"} currently require attention.`
+                                        : "No assignments are currently in the Focus Queue."}
+                                </p>
+                            </Panel>
+
+                            <Panel title="Upcoming Clinical Ops">
+                                <p className="text-sm text-slate-400">
+                                    No authoritative clinical operations source is
+                                    connected yet.
                                 </p>
                             </Panel>
 
@@ -531,6 +712,25 @@ export default function MedicalUnitPage() {
                                         <span className="text-cyan-100">68</span>
                                     </div>
                                 </div>
+                            </Panel>
+
+                            <Panel title="Next Quarter Outlook">
+                                <p className="text-xl font-bold text-cyan-100">
+                                    {nextQuarter?.name ?? "Not configured"}
+                                </p>
+                                <p className="mt-2 text-sm text-slate-400">
+                                    {nextQuarter?.startDate && nextQuarter.endDate
+                                        ? `${formatDueDate(nextQuarter.startDate)} – ${formatDueDate(nextQuarter.endDate)}`
+                                        : "Dates unavailable"}
+                                </p>
+                                <p className="mt-2 text-sm text-slate-400">
+                                    {nextQuarter
+                                        ? `${nextQuarter.credits} credits planned for the upcoming quarter.`
+                                        : "No upcoming quarter is marked in Notion."}
+                                </p>
+                                <p className="mt-3 text-xs uppercase tracking-[0.18em] text-slate-500">
+                                    Course list not connected
+                                </p>
                             </Panel>
                         </div>
                     </div>

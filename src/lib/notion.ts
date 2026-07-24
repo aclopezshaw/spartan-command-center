@@ -914,3 +914,122 @@ export async function updateWeeklyOperationCheckbox(
     },
   });
 }
+
+export type AcademicQuarterSummary = {
+  name: string;
+  credits: number;
+  startDate: string | null;
+  endDate: string | null;
+};
+
+type AcademicQuarterPage = {
+  properties?: {
+    Quarter?: { title?: Array<{ plain_text?: string }> };
+    Credits?: { number?: number | null };
+    "Start Date"?: { date?: { start?: string | null } | null };
+    "End Date"?: { date?: { start?: string | null } | null };
+    Status?: { select?: { name?: string } | null };
+  };
+};
+
+type DataSourceSearchResult = {
+  object: string;
+  id: string;
+  title?: Array<{ plain_text?: string }>;
+};
+
+let academicQuartersDataSourceId: string | null = null;
+
+async function getAcademicQuartersDataSourceId() {
+  if (academicQuartersDataSourceId) {
+    return academicQuartersDataSourceId;
+  }
+
+  const configuredId = process.env.ACADEMIC_QUARTERS_DATA_SOURCE_ID;
+
+  if (configuredId) {
+    academicQuartersDataSourceId = configuredId;
+    return configuredId;
+  }
+
+  const response = await getNotionClient().search({
+    query: "Quarters",
+    filter: {
+      property: "object",
+      value: "data_source",
+    },
+    page_size: 25,
+  });
+  const exactMatch = (
+    response.results as DataSourceSearchResult[]
+  ).find(
+    (result) =>
+      result.object === "data_source" &&
+      result.title
+        ?.map((part) => part.plain_text ?? "")
+        .join("")
+        .trim()
+        .toLowerCase() === "quarters"
+  );
+
+  if (!exactMatch) {
+    throw new Error("Academic Quarters data source not found");
+  }
+
+  academicQuartersDataSourceId = exactMatch.id;
+  return exactMatch.id;
+}
+
+function toAcademicQuarterSummary(
+  page: AcademicQuarterPage
+): AcademicQuarterSummary {
+  const properties = page.properties ?? {};
+
+  return {
+    name:
+      properties.Quarter?.title?.[0]?.plain_text ??
+      "Unnamed Quarter",
+    credits: properties.Credits?.number ?? 0,
+    startDate: properties["Start Date"]?.date?.start ?? null,
+    endDate: properties["End Date"]?.date?.start ?? null,
+  };
+}
+
+export async function getAcademicQuarterOverview() {
+  const notion = getNotionClient();
+  const dataSourceId = await getAcademicQuartersDataSourceId();
+  const response = await notion.dataSources.query({
+    data_source_id: dataSourceId,
+    filter: {
+      or: [
+        {
+          property: "Status",
+          select: {
+            equals: "Active",
+          },
+        },
+        {
+          property: "Status",
+          select: {
+            equals: "Up Next",
+          },
+        },
+      ],
+    },
+    page_size: 10,
+  });
+  const quarters = response.results as AcademicQuarterPage[];
+  const active = quarters.find(
+    (quarter) =>
+      quarter.properties?.Status?.select?.name === "Active"
+  );
+  const upNext = quarters.find(
+    (quarter) =>
+      quarter.properties?.Status?.select?.name === "Up Next"
+  );
+
+  return {
+    active: active ? toAcademicQuarterSummary(active) : null,
+    upNext: upNext ? toAcademicQuarterSummary(upNext) : null,
+  };
+}

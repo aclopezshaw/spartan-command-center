@@ -288,6 +288,12 @@ export async function GET() {
                     },
                 },
                 {
+                    property: "Priority",
+                    select: {
+                    does_not_equal: "Optional",
+                    },
+                },
+                {
                     or: [
                     {
                         property: "Priority",
