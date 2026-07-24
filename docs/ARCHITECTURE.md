@@ -91,11 +91,11 @@ Daily record selection and hydration aggregation now share the America/Denver op
 
 ### Event completion
 
-1. `EventSystem` derives the active event from `eventCatalog` and browser-local completed IDs.
-2. As an interim fallback for SDCB #187, the browser immediately adds the event ID to local state and `localStorage` so a failed backend request does not block local completion.
-3. It makes a best-effort post of client-supplied event metadata to `/api/complete-event`.
-4. When the request succeeds, the Route Handler optionally resolves Event and Service Record relations and calls the shared `createServiceHistoryEntry` helper to create a Service History page in Notion.
-5. A failed request is logged but does not roll back browser-local completion. Backend history, rewards, and cross-device completion remain unresolved.
+1. `getActiveCampaignEventState` loads Event records from Notion, resolves their related Campaign Operations phase records, and returns the active campaign name, phase name, next phase name, phase length, schedule, and authoritative campaign day. Event records without a legacy `Event ID` use their stable Notion page ID for application identity, while completion is derived directly from the resolved record and linked history.
+2. `EventSystem` loads that server-derived state from `/api/events/status`, derives the current or next phase event, and keeps local state only after a successful completion response.
+3. `/api/complete-event` accepts only an event identifier; it rejects events outside the active phase, events before their scheduled campaign day, and later events while an earlier one is unresolved.
+4. The Route Handler evaluates authoritative readiness, writes `Failed` only for an unsuccessful review, and on success creates the linked Service History entry before writing the Event record as `Defeated` with a Denver date key.
+5. Legacy catalog entries remain presentation fallbacks for event copy and artwork while scheduling, readiness requirements, phase scope, and completion state come from Notion.
 
 ### Academic assignment flow
 
