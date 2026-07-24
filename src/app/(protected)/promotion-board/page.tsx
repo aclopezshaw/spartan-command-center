@@ -1,35 +1,19 @@
 import NavBar from "../../components/NavBar";
 import PageHeader from "../../components/PageHeader";
-import { getAlexServiceRecord } from "@/lib/notion";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
-const rankLadder = [
-  ["Bronze I", 8000], ["Bronze II", 16000], ["Bronze III", 24000],
-  ["Silver I", 32000], ["Silver II", 40000], ["Silver III", 48000],
-  ["Gold I", 56500], ["Gold II", 65000], ["Gold III", 73500],
-] as const;
-
-export default async function PromotionBoardPage() {
-  const record = await getAlexServiceRecord();
-  const properties = (record as any)?.properties ?? {};
-  const currentXp = properties["Service Score"]?.formula?.number ?? 0;
-  const currentRank = properties["Calculated Rank"]?.formula?.string ?? "Recruit";
-  const nextRank = rankLadder.find(([, threshold]) => currentXp < threshold) ?? rankLadder.at(-1)!;
-  const nextRankName = nextRank[0];
-  const nextRankXp = nextRank[1];
+export default function PromotionBoardPage() {
+  const currentXp = 595;
+  const nextRankXp = 8000;
   const remainingXp = nextRankXp - currentXp;
   const assumedDailyXp = 150;
   const estimatedDays = Math.ceil(remainingXp / assumedDailyXp);
-  const readyForReview = currentXp >= nextRankXp;
 
   return (
     <main className="min-h-screen bg-black p-6 font-mono text-slate-100">
-      <div className="mx-auto max-w-6xl space-y-6">
+      <div className="mx-auto max-w-7xl space-y-6">
         <NavBar />
 
-        <section className="border border-cyan-600/60 bg-slate-950/90 p-6 shadow-[0_0_30px_rgba(8,145,178,0.25)]">
+        <section className="border border-cyan-600/60 bg-slate-950/90 p-8 shadow-[0_0_30px_rgba(8,145,178,0.25)]">
           <PageHeader eyebrow="UNSC Personnel Command" title="Promotion Board" />
 
           <div className="mt-8 grid gap-6 lg:grid-cols-3">
@@ -50,13 +34,11 @@ export default async function PromotionBoardPage() {
                   </p>
 
                   <p className="mt-4 text-4xl font-black text-white">
-                    {readyForReview ? "READY FOR REVIEW" : "NOT READY FOR REVIEW"}
+                    NOT READY FOR REVIEW
                   </p>
 
                   <p className="mt-4 max-w-xl text-sm text-slate-300">
-                    {readyForReview
-                      ? `Candidate has met the XP threshold for ${nextRankName}.`
-                      : `Candidate is ${remainingXp.toLocaleString()} XP away from ${nextRankName}.`}
+                    Candidate has not yet met promotion eligibility requirements.
                   </p>
 
                   <div className="mt-8 grid gap-4 sm:grid-cols-3">
@@ -112,7 +94,7 @@ export default async function PromotionBoardPage() {
                 <div className="mt-3 space-y-2 text-sm">
                   <div className="flex justify-between border-b border-cyan-900/60 pb-2">
                     <span>XP Requirement</span>
-                        <span className={readyForReview ? "text-emerald-300" : "text-slate-500"}>{readyForReview ? "Met" : "Pending"}</span>
+                    <span className="text-slate-500">Pending</span>
                   </div>
                   <div className="flex justify-between border-b border-cyan-900/60 pb-2">
                     <span>Campaign Progress</span>
@@ -129,11 +111,11 @@ export default async function PromotionBoardPage() {
                 <p className="text-xs uppercase tracking-widest text-cyan-400">
                   Promotion Target
                 </p>
-                  <p className="mt-2 text-2xl font-bold text-amber-500">
-                  {nextRankName}
+                <p className="mt-2 text-2xl font-bold text-amber-500">
+                  Bronze I
                 </p>
                 <p className="mt-2 text-sm text-slate-500">
-                  Current rank: {currentRank}. Estimated at {assumedDailyXp} XP/day.
+                  Estimated at {assumedDailyXp} XP/day.
                 </p>
               </div>
             </div>
