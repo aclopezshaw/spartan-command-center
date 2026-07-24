@@ -39,6 +39,11 @@ export type CampaignEventState = {
   nextPhaseName: string | null;
   campaignDay: number | null;
   phaseLength: number | null;
+  maxHabitXp: number | null;
+  maxEventXp: number | null;
+  bronzeThresholdPercent: number | null;
+  silverThresholdPercent: number | null;
+  goldThresholdPercent: number | null;
   events: CampaignEvent[];
 };
 
@@ -76,6 +81,11 @@ type CampaignPhasePage = {
     "Phase Number"?: { number?: number | null };
     "Campaign Day"?: { formula?: { number?: number | null } };
     "Phase Length"?: { number?: number | null };
+    "Max Campaign XP"?: { formula?: { number?: number | null } };
+    "Max Event XP"?: { number?: number | null };
+    "Bronze Readiness %"?: { number?: number | null };
+    "Silver Readiness %"?: { number?: number | null };
+    "Gold Readiness %"?: { number?: number | null };
   };
 };
 
@@ -244,6 +254,11 @@ export async function getActiveCampaignEventState(): Promise<CampaignEventState>
       nextPhaseName: null,
       campaignDay: null,
       phaseLength: null,
+      maxHabitXp: null,
+      maxEventXp: null,
+      bronzeThresholdPercent: null,
+      silverThresholdPercent: null,
+      goldThresholdPercent: null,
       events: [],
     };
   }
@@ -299,6 +314,16 @@ export async function getActiveCampaignEventState(): Promise<CampaignEventState>
     campaignDay:
       activePhase.properties["Campaign Day"]?.formula?.number ?? null,
     phaseLength: activePhase.properties["Phase Length"]?.number ?? null,
+    maxHabitXp:
+      activePhase.properties["Max Campaign XP"]?.formula?.number ?? null,
+    maxEventXp:
+      activePhase.properties["Max Event XP"]?.number ?? null,
+    bronzeThresholdPercent:
+      activePhase.properties["Bronze Readiness %"]?.number ?? null,
+    silverThresholdPercent:
+      activePhase.properties["Silver Readiness %"]?.number ?? null,
+    goldThresholdPercent:
+      activePhase.properties["Gold Readiness %"]?.number ?? null,
     events: events
       .map(toCampaignEvent)
       .filter((event) => event.phaseId === activePhase.id)

@@ -289,6 +289,18 @@ function getNextRankXp(xp: number) {
     return thresholds.find((threshold) => xp < threshold) ?? 270000;
 }
 
+function getCampaignMedalPace(
+    projectedXp: number,
+    bronzeThresholdXp: number,
+    silverThresholdXp: number,
+    goldThresholdXp: number
+) {
+    if (projectedXp >= goldThresholdXp && goldThresholdXp > 0) return "Gold Pace";
+    if (projectedXp >= silverThresholdXp && silverThresholdXp > 0) return "Silver Pace";
+    if (projectedXp >= bronzeThresholdXp && bronzeThresholdXp > 0) return "Bronze Pace";
+    return "Unrated Pace";
+}
+
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -321,16 +333,47 @@ const properties = (freshRecord as any).properties;
     const xpProgress = Math.round((spartan.xp / spartan.nextRankXp) * 100);
     const xpToNextRank = spartan.nextRankXp - spartan.xp;
     const campaignXp = spartan.xp;
-    const maxPhaseXp = getNumberProperty(properties, "Max XP (w/ Events)");
-    const silverThresholdXp = getNumberProperty(
-        properties,
-        "Silver Threshold XP"
-    );
-    const goldThresholdXp = getNumberProperty(properties, "Gold Threshold XP");
+    const phaseOwnedMaxXp =
+        (activeCampaignEventState.maxHabitXp ?? 0) +
+        (activeCampaignEventState.maxEventXp ?? 0);
+    const maxPhaseXp =
+        phaseOwnedMaxXp > 0
+            ? phaseOwnedMaxXp
+            : getNumberProperty(properties, "Max XP (w/ Events)");
+    const bronzeThresholdXp = activeCampaignEventState.bronzeThresholdPercent
+        ? Math.round(
+              maxPhaseXp *
+                  (activeCampaignEventState.bronzeThresholdPercent / 100)
+          )
+        : getNumberProperty(properties, "Bronze Threshold XP");
+    const silverThresholdXp = activeCampaignEventState.silverThresholdPercent
+        ? Math.round(
+              maxPhaseXp *
+                  (activeCampaignEventState.silverThresholdPercent / 100)
+          )
+        : getNumberProperty(properties, "Silver Threshold XP");
+    const goldThresholdXp = activeCampaignEventState.goldThresholdPercent
+        ? Math.round(
+              maxPhaseXp *
+                  (activeCampaignEventState.goldThresholdPercent / 100)
+          )
+        : getNumberProperty(properties, "Gold Threshold XP");
     const campaignProgress =
         maxPhaseXp > 0 ? Math.round((campaignXp / maxPhaseXp) * 100) : 0;
+    const projectedCampaignXp = getNumberProperty(
+        properties,
+        "Projected Campaign XP"
+    );
     const campaignMedalPace =
-        getTextProperty(properties, "Campaign Medal Pace") || "Unrated Pace";
+        phaseOwnedMaxXp > 0
+            ? getCampaignMedalPace(
+                  projectedCampaignXp,
+                  bronzeThresholdXp,
+                  silverThresholdXp,
+                  goldThresholdXp
+              )
+            : getTextProperty(properties, "Campaign Medal Pace") ||
+              "Unrated Pace";
     const campaignMedalPaceLabel =
         campaignMedalPace.replace(/^[^A-Za-z0-9]+/, "").trim() ||
         "Unrated Pace";
@@ -444,7 +487,7 @@ spartan.readiness = readinessTotals;
 
                                 <div className="mt-6 flex flex-wrap justify-between gap-2 text-sm text-slate-300">
                                     <span>
-                                        Phase XP ·{" "}
+                                        Projected Medal Pace ·{" "}
                                         <span className={medalPaceTheme.textClassName}>
                                             {campaignMedalPaceLabel}
                                         </span>
