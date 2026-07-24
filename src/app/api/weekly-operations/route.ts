@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { updateWeeklyOperationCheckbox } from "@/lib/notion";
+import { evaluateAchievements } from "@/lib/achievements";
 
 export async function POST(request: Request) {
   const { pageId, propertyName, checked } = await request.json();
@@ -13,5 +14,7 @@ export async function POST(request: Request) {
 
   await updateWeeklyOperationCheckbox(pageId, propertyName, checked);
 
-  return NextResponse.json({ ok: true });
+  const awarded = checked ? await evaluateAchievements() : [];
+
+  return NextResponse.json({ ok: true, awarded });
 }

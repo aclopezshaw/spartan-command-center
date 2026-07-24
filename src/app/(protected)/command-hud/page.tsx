@@ -10,7 +10,8 @@ import {
   getOperationalHour,
   getOperationalWeekRange,
 } from "@/lib/date";
-import { getAlexServiceRecord, getOrCreateWeeklyOperations, getTodaySitrep, getWorkoutCountForWeek, updateWeeklyOperationCheckbox } from "@/lib/notion";
+import { getCampaignPhaseDisplayName } from "@/lib/campaign";
+import { getActiveCampaignEventState, getAlexServiceRecord, getOrCreateWeeklyOperations, getTodaySitrep, getWorkoutCountForWeek, updateWeeklyOperationCheckbox } from "@/lib/notion";
 
 function ObjectiveRow({
   label,
@@ -114,10 +115,20 @@ export default async function CommandHudPage() {
   const designation =
     serviceRecordProperties["Designation"]?.title?.[0]?.plain_text ?? "NULL";
 
-  const currentCampaign = "Spartan Candidate Program";
+  const activeCampaignEventState = await getActiveCampaignEventState();
   const campaignStart = "2026-06-21";
   const today = getOperationalDateKey();
-  const campaignDay = differenceInDateKeys(campaignStart, today) + 1;
+  const campaignDay =
+    activeCampaignEventState.campaignDay ??
+    differenceInDateKeys(campaignStart, today) + 1;
+  const campaignName =
+    activeCampaignEventState.campaignName ?? "Campaign Unassigned";
+  const phaseName = getCampaignPhaseDisplayName(
+    activeCampaignEventState.phaseName
+  );
+  const campaignDayProgress = activeCampaignEventState.phaseLength
+    ? `${campaignDay} / ${activeCampaignEventState.phaseLength}`
+    : String(campaignDay);
   const { startDateKey: weekStart } = getOperationalWeekRange(new Date(), 0);
   const weeklyOps = (await getOrCreateWeeklyOperations(weekStart)) as any;
   const weeklyProps = weeklyOps.properties;
@@ -143,11 +154,6 @@ export default async function CommandHudPage() {
     weeklyProps["Shot"]?.checkbox ?? false;
   const planningComplete =
     weeklyProps["Planning"]?.checkbox ?? false;
-
-  const medalPace = getTextProperty(
-    serviceRecordProperties,
-    "Campaign Medal Pace"
-  );
 
     const currentHour = getOperationalHour();
     const hudBackground =
@@ -185,7 +191,7 @@ export default async function CommandHudPage() {
 
   return (
     <main className="min-h-screen bg-black p-6 font-mono text-slate-100">
-      <div className="mx-auto max-w-7xl space-y-6">
+      <div className="mx-auto max-w-6xl space-y-6">
         <NavBar />
 
         <section className="border border-cyan-600/60 bg-slate-950/90 p-6 shadow-[0_0_30px_rgba(8,145,178,0.25)]">
@@ -204,53 +210,55 @@ export default async function CommandHudPage() {
               <div className="absolute inset-0 bg-black/20" />
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_35%,rgba(0,0,0,0.65)_100%)]" />
 
-                <div className="absolute left-8 top-6 z-10">
-                <p className="text-xl font-bold tracking-[0.2em] text-cyan-100">
-                    {designation}
-                </p>
-                <p className="mt-1 text-xs uppercase tracking-[0.25em] text-cyan-400">
-                    Status: Active
-                </p>
-                
+              <div className="absolute left-8 top-6 z-10 flex flex-col items-start gap-6">
+                <div className="text-left">
+                  <p className="text-sm font-bold uppercase tracking-[0.16em] text-cyan-100">
+                    {campaignName}
+                  </p>
+                  <p className="mt-1 text-xs uppercase tracking-[0.2em] text-cyan-300">
+                    {phaseName}
+                  </p>
+                  <p className="mt-1 text-xs uppercase tracking-[0.2em] text-cyan-300/80">
+                    Campaign Day {campaignDayProgress}
+                  </p>
                 </div>
 
-                <div className="absolute right-8 top-6 z-10 text-right">
-                    <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
-                        Medal Pace
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-amber-500">
-                        {medalPace}
-                    </p>
-                </div>
-
-              <div className="absolute left-8 top-32 z-10 w-[230px]">
-                <HudPanel title="Mission Objectives">
-                  <div className="space-y-1">
-                    {dailyObjectives.map(([label, xp, propertyName]) => (
+                <div className="w-[230px]">
+                  <HudPanel title="Mission Objectives">
+                    <div className="space-y-1">
+                      {dailyObjectives.map(([label, xp, propertyName]) => (
                         <HudCheckbox
-                            key={propertyName}
-                            label={label}
-                            xp={xp}
-                            propertyName={propertyName}
-                            checked={sitrepProperties[propertyName]?.checkbox ?? false}
+                          key={propertyName}
+                          label={label}
+                          xp={xp}
+                          propertyName={propertyName}
+                          checked={sitrepProperties[propertyName]?.checkbox ?? false}
                         />
-                    ))}
-                  </div>
+                      ))}
+                    </div>
 
-                  <div className="mt-4 border border-cyan-900/60 bg-black/50 p-3">
-                    <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
-                      Daily XP Pool
-                    </p>
-                    <p className="mt-1 text-2xl font-bold text-cyan-300">
-                      {dailyXp} / {maxDailyXp}
-                    </p>
-                  </div>
-                </HudPanel>
+                    <div className="mt-4 border border-cyan-900/60 bg-black/50 p-3">
+                      <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
+                        Daily XP Pool
+                      </p>
+                      <p className="mt-1 text-2xl font-bold text-cyan-300">
+                        {dailyXp} / {maxDailyXp}
+                      </p>
+                    </div>
+                  </HudPanel>
+                </div>
               </div>
 
-              <EventSystem campaignDay={campaignDay} />
+              <div className="absolute right-8 top-6 z-10 text-right">
+                <p className="text-xl font-bold tracking-[0.2em] text-cyan-100">
+                  {designation}
+                </p>
+                <p className="mt-1 text-xs uppercase tracking-[0.25em] text-cyan-400">
+                  Status: Active
+                </p>
+              </div>
 
-              <div className="absolute right-8 top-[420px] z-10 w-[220px] flex flex-col gap-6">
+              <EventSystem>
                 <HudPanel title="Weekly Operations">
                   <div className="space-y-1">
                     <HudCheckbox
@@ -288,7 +296,7 @@ export default async function CommandHudPage() {
                     </p>
                   </div>
                 </HudPanel>
-              </div>
+              </EventSystem>
 
               <div className="pointer-events-none absolute inset-4 border border-cyan-400/20" />
               <div className="pointer-events-none absolute inset-0 shadow-[inset_0_0_80px_rgba(8,145,178,0.35)]" />

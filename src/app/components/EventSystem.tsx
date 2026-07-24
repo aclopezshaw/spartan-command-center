@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { areAllCampaignEventsComplete, getActiveEvent, getNextEvent } from "@/lib/events";
 import { getEventReadinessCopy } from "@/lib/event-readiness";
+import { getCampaignPhaseDisplayName } from "@/lib/campaign";
+import { CampaignEvent } from "@/data/events";
 import HudPanel from "../components/HudPanel";
 import { NextEventPanel } from "../components/NextEventPanel";
 
@@ -12,26 +14,38 @@ type CompletionResponse = {
   unmetRequirements?: string[];
 };
 
-export function EventSystem({ campaignDay }: { campaignDay: number }) {
+export function EventSystem({ children }: { children: ReactNode }) {
   const [completedEventIds, setCompletedEventIds] = useState<string[]>([]);
+  const [events, setEvents] = useState<CampaignEvent[]>([]);
+  const [campaignDay, setCampaignDay] = useState<number | null>(null);
+  const [phaseName, setPhaseName] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reviewingEventId, setReviewingEventId] = useState<string | null>(null);
   const [completionError, setCompletionError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const activeCampaignDay = campaignDay ?? 0;
 
   useEffect(() => {
     let active = true;
 
     async function loadStatus() {
       try {
-        const response = await fetch("/api/events/status");
+        const response = await fetch("/api/events/status", { cache: "no-store" });
         const body = (await response.json()) as {
           completedEventIds?: string[];
+          campaignDay?: number | null;
+          phase?: { name?: string | null } | null;
+          events?: CampaignEvent[];
           error?: string;
         };
         if (!response.ok) throw new Error(body.error ?? "Unable to load event status");
-        if (active) setCompletedEventIds(body.completedEventIds ?? []);
+        if (active) {
+          setCompletedEventIds(body.completedEventIds ?? []);
+          setEvents(body.events ?? []);
+          setCampaignDay(body.campaignDay ?? null);
+          setPhaseName(body.phase?.name ?? null);
+        }
       } catch (error) {
         if (active) {
           setLoadError(
@@ -49,14 +63,14 @@ export function EventSystem({ campaignDay }: { campaignDay: number }) {
     };
   }, []);
 
-  const activeEvent = loaded && !loadError
-    ? getActiveEvent(campaignDay, completedEventIds)
+  const activeEvent = loaded && !loadError && campaignDay !== null
+    ? getActiveEvent(activeCampaignDay, completedEventIds, events)
     : undefined;
-  const nextEvent = loaded && !loadError
-    ? getNextEvent(campaignDay, completedEventIds)
+  const nextEvent = loaded && !loadError && campaignDay !== null
+    ? getNextEvent(activeCampaignDay, completedEventIds, events)
     : undefined;
   const phaseComplete =
-    loaded && !loadError && areAllCampaignEventsComplete(completedEventIds);
+    loaded && !loadError && areAllCampaignEventsComplete(completedEventIds, events);
 
   async function completeEvent() {
     if (!activeEvent || isSaving) return;
@@ -68,7 +82,7 @@ export function EventSystem({ campaignDay }: { campaignDay: number }) {
       const response = await fetch("/api/complete-event", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ eventId: activeEvent.id, campaignDay }),
+        body: JSON.stringify({ eventId: activeEvent.id }),
       });
       const body = (await response.json()) as CompletionResponse;
 
@@ -92,15 +106,41 @@ export function EventSystem({ campaignDay }: { campaignDay: number }) {
     }
   }
 
-  if (!loaded) return null;
+  let eventPanel: ReactNode = null;
 
-  if (loadError) {
-    return (
-      <div className="absolute right-8 top-32 z-20 w-[260px]">
-        <HudPanel title="Event Status" titleClassName="text-amber-300 tracking-[0.4em]">
-          <p className="text-xs text-amber-200">{loadError}. Refresh to try again.</p>
-        </HudPanel>
-      </div>
+  if (loaded && loadError) {
+    eventPanel = (
+      <HudPanel title="Event Status" titleClassName="text-amber-300 tracking-[0.4em]">
+        <p className="text-xs text-amber-200">{loadError}. Refresh to try again.</p>
+      </HudPanel>
+    );
+  } else if (activeEvent) {
+    eventPanel = (
+      <NextEventPanel
+        event={activeEvent}
+        campaignDay={activeCampaignDay}
+        isActive
+        onReview={() => {
+          setCompletionError(null);
+          setReviewingEventId(activeEvent.id);
+        }}
+      />
+    );
+  } else if (nextEvent) {
+    eventPanel = (
+      <NextEventPanel event={nextEvent} campaignDay={activeCampaignDay} />
+    );
+  } else if (phaseComplete) {
+    eventPanel = (
+      <HudPanel title="Campaign Events" titleClassName="text-emerald-300 tracking-[0.3em]">
+        <p className="text-sm font-bold uppercase leading-tight text-emerald-200">
+          All Events Complete for This Phase
+        </p>
+        <p className="mt-2 text-xs text-slate-400">
+          {getCampaignPhaseDisplayName(phaseName)} transition awaits its separate
+          operational criteria.
+        </p>
+      </HudPanel>
     );
   }
 
@@ -111,20 +151,6 @@ export function EventSystem({ campaignDay }: { campaignDay: number }) {
           className="pointer-events-none absolute inset-0 z-[5] bg-cover bg-center opacity-80"
           style={{ backgroundImage: `url(${activeEvent.backgroundImage})` }}
         />
-      )}
-
-      {activeEvent && (
-        <div className="absolute right-8 top-32 z-20 w-[220px]">
-          <NextEventPanel
-            event={activeEvent}
-            campaignDay={campaignDay}
-            isActive
-            onReview={() => {
-              setCompletionError(null);
-              setReviewingEventId(activeEvent.id);
-            }}
-          />
-        </div>
       )}
 
       {activeEvent && reviewingEventId === activeEvent.id && (
@@ -148,24 +174,10 @@ export function EventSystem({ campaignDay }: { campaignDay: number }) {
         </div>
       )}
 
-      {!activeEvent && nextEvent && (
-        <div className="absolute right-8 top-32 z-20 w-[220px]">
-          <NextEventPanel event={nextEvent} campaignDay={campaignDay} />
-        </div>
-      )}
-
-      {phaseComplete && (
-        <div className="absolute right-8 top-32 z-20 w-[260px]">
-          <HudPanel title="Campaign Events" titleClassName="text-emerald-300 tracking-[0.3em]">
-            <p className="text-sm font-bold uppercase leading-tight text-emerald-200">
-              All Events Complete for This Phase
-            </p>
-            <p className="mt-2 text-xs text-slate-400">
-              Phase transition awaits its separate operational criteria.
-            </p>
-          </HudPanel>
-        </div>
-      )}
+      <div className="absolute right-8 top-32 z-20 flex w-[220px] flex-col gap-6">
+        {eventPanel}
+        {children}
+      </div>
     </>
   );
 }

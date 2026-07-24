@@ -1,31 +1,137 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import HudPanel from "../../components/HudPanel";
 import NavBar from "../../components/NavBar";
 import PageHeader from "../../components/PageHeader";
+
+type WorkoutMetrics = {
+    minutes: number;
+    miles: number;
+    hydrationAverage: number;
+    weeklyCount: number;
+};
+
+async function fetchHydrationTotal() {
+    const response = await fetch("/api/hydration-total");
+
+    if (!response.ok) {
+        throw new Error("Failed to load hydration total");
+    }
+
+    const data = await response.json();
+    return data.total ?? 0;
+}
+
+async function fetchWorkoutMetrics(): Promise<WorkoutMetrics> {
+    const [summaryResponse, hydrationResponse, weeklyResponse] =
+        await Promise.all([
+            fetch("/api/workout-summary", { cache: "no-store" }),
+            fetch("/api/hydration-phase-average", { cache: "no-store" }),
+            fetch("/api/workout-weekly-count", { cache: "no-store" }),
+        ]);
+
+    const [summary, hydration, weekly] = await Promise.all([
+        summaryResponse.ok ? summaryResponse.json() : null,
+        hydrationResponse.ok ? hydrationResponse.json() : null,
+        weeklyResponse.ok ? weeklyResponse.json() : null,
+    ]);
+
+    return {
+        minutes: summary?.minutes ?? 0,
+        miles: summary?.miles ?? 0,
+        hydrationAverage: hydration?.average ?? 0,
+        weeklyCount: weekly?.count ?? 0,
+    };
+}
 
 export default function TrainingReportsPage() {
 
     const [hydrationAmount, setHydrationAmount] = useState("");
     const [hydrationStatus, setHydrationStatus] = useState("");
     const [hydrationTotal, setHydrationTotal] = useState(0);
+    const [workoutTotals, setWorkoutTotals] = useState({ minutes: 0, miles: 0 });
+    const [phaseHydrationAverage, setPhaseHydrationAverage] = useState(0);
+    const [weeklyWorkoutCount, setWeeklyWorkoutCount] = useState(0);
+    const [workout, setWorkout] = useState({ type: "Strength", category: "Strength", duration: "", distance: "", rpe: "3", notes: "" });
+    const [workoutStatus, setWorkoutStatus] = useState("");
+    const [workoutSubmitting, setWorkoutSubmitting] = useState(false);
+
     const hydrationProgress = hydrationTotal/96;
 
-    useEffect(() => {
-        loadHydrationTotal();
+    const loadWorkoutMetrics = useCallback(async () => {
+        const metrics = await fetchWorkoutMetrics();
+        setWorkoutTotals({
+            minutes: metrics.minutes,
+            miles: metrics.miles,
+        });
+        setPhaseHydrationAverage(metrics.hydrationAverage);
+        setWeeklyWorkoutCount(metrics.weeklyCount);
     }, []);
 
-    async function loadHydrationTotal() {
-        const response = await fetch("/api/hydration-total");
-
-        if (!response.ok) {
-            console.error("Failed to load hydration total");
-            return;
+    const loadHydrationTotal = useCallback(async () => {
+        try {
+            setHydrationTotal(await fetchHydrationTotal());
+        } catch (error) {
+            console.error("Failed to load hydration total", error);
         }
+    }, []);
 
-        const data = await response.json();
-        setHydrationTotal(data.total ?? 0);
+    useEffect(() => {
+        let cancelled = false;
+
+        void Promise.all([
+            fetchHydrationTotal(),
+            fetchWorkoutMetrics(),
+        ]).then(([total, metrics]) => {
+            if (cancelled) return;
+
+            setHydrationTotal(total);
+            setWorkoutTotals({
+                minutes: metrics.minutes,
+                miles: metrics.miles,
+            });
+            setPhaseHydrationAverage(metrics.hydrationAverage);
+            setWeeklyWorkoutCount(metrics.weeklyCount);
+        }).catch((error) => {
+            console.error("Failed to load training metrics", error);
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    async function submitWorkout() {
+        if (workoutSubmitting) return;
+
+        setWorkoutSubmitting(true);
+        setWorkoutStatus("Submitting...");
+
+        try {
+            const response = await fetch("/api/workout-log", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(workout),
+            });
+            const result = await response.json();
+
+            if (!response.ok) {
+                setWorkoutStatus(result.error ?? "Unable to log workout.");
+                return;
+            }
+
+            setWorkoutStatus("Workout logged.");
+            setWorkout((current) => ({
+                ...current,
+                duration: "",
+                distance: "",
+                notes: "",
+            }));
+            await loadWorkoutMetrics();
+        } finally {
+            setWorkoutSubmitting(false);
+        }
     }
 
     async function submitHydration(amount: number) {
@@ -50,7 +156,7 @@ export default function TrainingReportsPage() {
         setHydrationStatus(`${amount} oz logged.`);
         setHydrationAmount("");
 
-        loadHydrationTotal();
+        await loadHydrationTotal();
     }
 
   return (
@@ -63,7 +169,7 @@ export default function TrainingReportsPage() {
             title="Training Reports"
             />
 
-            <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
+            <div className="mt-8 grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
             <HudPanel title="Hydration Report">
                 <div className="space-y-5">
                 <div>
@@ -141,13 +247,13 @@ export default function TrainingReportsPage() {
                     Training Type
                     </span>
 
-                    <select className="mt-2 w-full border border-cyan-900/60 bg-black/60 p-3 text-slate-100">
+                    <select value={workout.category} onChange={(e) => setWorkout({ ...workout, category: e.target.value, type: e.target.value })} className="mt-2 w-full border border-cyan-900/60 bg-black/60 p-3 text-slate-100">
                     <option>Strength</option>
                     <option>Run</option>
                     <option>Walk</option>
-                    <option>Mobility</option>
-                    <option>Recovery</option>
-                    <option>Other</option>
+                    <option>Run/Walk</option>
+                    <option>Hike</option>
+                    <option>Race</option>
                     </select>
                 </label>
 
@@ -156,7 +262,7 @@ export default function TrainingReportsPage() {
                     Duration
                     </span>
 
-                    <input
+                    <input value={workout.duration} onChange={(e) => setWorkout({ ...workout, duration: e.target.value })}
                     type="number"
                     placeholder="Minutes"
                     className="mt-2 w-full border border-cyan-900/60 bg-black/60 p-3 text-slate-100"
@@ -168,7 +274,7 @@ export default function TrainingReportsPage() {
                     Distance
                     </span>
 
-                    <input
+                    <input value={workout.distance} onChange={(e) => setWorkout({ ...workout, distance: e.target.value })}
                     type="number"
                     placeholder="Miles"
                     className="mt-2 w-full border border-cyan-900/60 bg-black/60 p-3 text-slate-100"
@@ -180,7 +286,7 @@ export default function TrainingReportsPage() {
                     RPE
                     </span>
 
-                    <select className="mt-2 w-full border border-cyan-900/60 bg-black/60 p-3 text-slate-100">
+                    <select value={workout.rpe} onChange={(e) => setWorkout({ ...workout, rpe: e.target.value })} className="mt-2 w-full border border-cyan-900/60 bg-black/60 p-3 text-slate-100">
                     <option>1</option>
                     <option>2</option>
                     <option>3</option>
@@ -194,7 +300,7 @@ export default function TrainingReportsPage() {
                     Field Notes
                     </span>
 
-                    <textarea
+                    <textarea value={workout.notes} onChange={(e) => setWorkout({ ...workout, notes: e.target.value })}
                     rows={5}
                     placeholder="Workout notes..."
                     className="mt-2 w-full border border-cyan-900/60 bg-black/60 p-3 text-slate-100"
@@ -202,33 +308,52 @@ export default function TrainingReportsPage() {
                 </label>
 
                 <div className="md:col-span-2">
-                    <button className="border border-green-500 bg-green-950/40 px-5 py-3 text-sm font-bold uppercase tracking-[0.25em] text-green-100 hover:bg-green-800/50">
-                    Submit Workout
+                    <button
+                        onClick={submitWorkout}
+                        disabled={workoutSubmitting}
+                        className="border border-green-500 bg-green-950/40 px-5 py-3 text-sm font-bold uppercase tracking-[0.25em] text-green-100 hover:bg-green-800/50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                    {workoutSubmitting ? "Submitting..." : "Submit Workout"}
                     </button>
+                    {workoutStatus && <p className="mt-2 text-sm text-green-300">{workoutStatus}</p>}
                 </div>
                 </div>
             </HudPanel>
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-3">
-            <HudPanel title="Hydration Objective">
+            <div className="mt-8 grid gap-4 lg:grid-cols-5">
+            <HudPanel title="Hydration Goal">
                 <p className="text-3xl font-black text-cyan-300">{Math.round(hydrationProgress * 100)}%</p>
                 <p className="mt-2 text-sm text-slate-400">
                 Daily hydration progress toward 96 oz objective.
                 </p>
             </HudPanel>
 
-            <HudPanel title="Weekly Training">
-                <p className="text-3xl font-black text-green-300">1 / 3</p>
+            <HudPanel title="Phase Fluid Avg">
+                <p className="text-3xl font-black text-cyan-300">{phaseHydrationAverage} oz</p>
+                <p className="mt-2 text-sm text-slate-400">
+                Average daily fluid intake across this phase.
+                </p>
+            </HudPanel>
+
+            <HudPanel title="Weekly Workouts">
+                <p className="text-3xl font-black text-green-300">{weeklyWorkoutCount} / 3</p>
                 <p className="mt-2 text-sm text-slate-400">
                 Workout operations completed this week.
                 </p>
             </HudPanel>
 
-            <HudPanel title="Readiness Impact">
-                <p className="text-3xl font-black text-slate-100">Physical</p>
+            <HudPanel title="Phase Minutes">
+                <p className="text-3xl font-black text-green-300">{workoutTotals.minutes}</p>
                 <p className="mt-2 text-sm text-slate-400">
-                Submitted workouts contribute to physical readiness tracking.
+                Total workout minutes recorded this phase.
+                </p>
+            </HudPanel>
+
+            <HudPanel title="Phase Miles">
+                <p className="text-3xl font-black text-cyan-300">{workoutTotals.miles.toFixed(1)}</p>
+                <p className="mt-2 text-sm text-slate-400">
+                Total miles recorded this phase.
                 </p>
             </HudPanel>
             </div>

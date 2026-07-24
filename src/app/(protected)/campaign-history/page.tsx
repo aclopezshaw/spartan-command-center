@@ -1,143 +1,97 @@
 import NavBar from "../../components/NavBar";
 import PageHeader from "../../components/PageHeader";
-
-function CampaignCard({
-  name,
-  status,
-  progress,
-  reward,
-  medal,
-}: {
-  name: string;
-  status: string;
-  progress: number;
-  reward: string;
-  medal: string;
-}) {
-  const isActive = status === "Active";
-
-  return (
-    <div
-      className={`border p-5 ${
-        isActive
-          ? "border-cyan-500/70 bg-slate-950/90 shadow-[0_0_20px_rgba(8,145,178,0.2)]"
-          : "border-cyan-900/60 bg-black/60"
-      }`}
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-cyan-400">
-            Campaign
-          </p>
-          <h2 className="mt-2 text-2xl font-bold text-white">{name}</h2>
-        </div>
-
-        <span
-          className={`border px-3 py-1 text-xs uppercase tracking-[0.2em] ${
-            isActive
-              ? "border-cyan-400 bg-cyan-400 text-black"
-              : "border-cyan-900/60 text-slate-500"
-          }`}
-        >
-          {status}
-        </span>
-      </div>
-
-      <div className="mt-5">
-        <div className="mb-2 flex justify-between text-sm text-slate-300">
-          <span>Progress</span>
-          <span>{progress}%</span>
-        </div>
-
-        <div className="h-3 w-full overflow-hidden rounded-sm border border-cyan-700/50 bg-slate-800">
-          <div
-            className="h-full bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.8)]"
-            style={{ width: `${Math.max(progress, 2)}%` }}
-          />
-        </div>
-      </div>
-
-      <div className="mt-5 grid gap-3 text-sm md:grid-cols-2">
-        <div>
-          <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
-            Reward
-          </p>
-          <p className="mt-1 text-cyan-100">{reward}</p>
-        </div>
-
-        <div>
-          <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
-            Medal Earned
-          </p>
-          <p className="mt-1 text-cyan-100">{medal}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
+import { getServiceHistoryRecords } from "@/lib/notion";
+import { formatDueDate } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default function CampaignHistoryPage() {
-  const campaigns = [
-    {
-      name: "Spartan Candidate Program",
-      status: "Active",
-      progress: 7,
-      reward: "Recruit Armor Set",
-      medal: "None",
-    },
-    {
-      name: "The Pillar of Autumn",
-      status: "Locked",
-      progress: 0,
-      reward: "Classified",
-      medal: "Locked",
-    },
-    {
-      name: "Halo",
-      status: "Locked",
-      progress: 0,
-      reward: "Classified",
-      medal: "Locked",
-    },
-    {
-      name: "The Truth and Reconciliation",
-      status: "Locked",
-      progress: 0,
-      reward: "Classified",
-      medal: "Locked",
-    },
-    {
-      name: "The Silent Cartographer",
-      status: "Locked",
-      progress: 0,
-      reward: "Classified",
-      medal: "Locked",
-    },
-    {
-      name: "Assault on the Control Room",
-      status: "Locked",
-      progress: 0,
-      reward: "Classified",
-      medal: "Locked",
-    },
-  ];
+function readinessColor(category: string) {
+  switch (category) {
+    case "Physical":
+      return "text-emerald-300 border-emerald-500/60";
+    case "Recovery":
+      return "text-blue-300 border-blue-500/60";
+    case "Intelligence":
+      return "text-yellow-300 border-yellow-500/60";
+    case "Professional":
+      return "text-purple-300 border-purple-500/60";
+    case "Mixed":
+      return "text-rose-300 border-rose-500/60";
+    default:
+      return "text-cyan-100 border-cyan-900/50";
+  }
+}
+
+function isCampaignRecord(entryType: string) {
+  return entryType === "Campaign" || entryType === "Minor Event" || entryType === "Major Event";
+}
+
+export default async function ServiceHistoryPage() {
+  const history = await getServiceHistoryRecords();
 
   return (
     <main className="min-h-screen bg-black p-6 font-mono text-slate-100">
-      <div className="mx-auto max-w-7xl space-y-6">
+      <div className="mx-auto max-w-6xl space-y-6">
         <NavBar />
 
         <section className="border border-cyan-600/60 bg-slate-950/90 p-6 shadow-[0_0_30px_rgba(8,145,178,0.25)]">
-          <PageHeader eyebrow="UNSC Campaign Archive" title="Campaign History" />
+          <PageHeader eyebrow="UNSC Personnel Archive" title="Service History" />
 
-          <div className="mt-6 grid gap-4">
-            {campaigns.map((campaign) => (
-              <CampaignCard key={campaign.name} {...campaign} />
-            ))}
-          </div>
+          <section className="mt-6">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="text-sm text-slate-400">
+                  Durable record of campaigns, events, achievements, and progression.
+                </p>
+              </div>
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                {history.length} {history.length === 1 ? "entry" : "entries"}
+              </p>
+            </div>
+
+            {history.length === 0 ? (
+              <p className="mt-5 border border-cyan-900/50 bg-black/50 p-5 text-sm text-slate-400">
+                No durable service history entries have been recorded yet.
+              </p>
+            ) : (
+              <div className="mt-5 space-y-3">
+                {history.map((entry) => (
+                  <article
+                    key={entry.id}
+                    className={`border bg-black/50 p-4 ${
+                      entry.readinessPoints > 0
+                        ? readinessColor(entry.readinessCategory)
+                        : isCampaignRecord(entry.entryType)
+                          ? "border-white/80 shadow-[0_0_14px_rgba(255,255,255,0.16)]"
+                          : "border-cyan-900/50"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className={`font-bold ${entry.readinessPoints > 0 ? readinessColor(entry.readinessCategory).split(" ")[0] : "text-cyan-100"}`}>
+                          {entry.title || "Untitled record"}
+                        </h3>
+                        <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-500">
+                          {entry.entryType}{entry.campaignDay ? ` · Campaign Day ${entry.campaignDay}` : ""}
+                        </p>
+                      </div>
+                      <div className="text-right text-xs text-slate-400">
+                        <p>{entry.date ? formatDueDate(entry.date) : "DATE UNKNOWN"}</p>
+                        {entry.xpAwarded > 0 && <p className="mt-1 text-cyan-300">+{entry.xpAwarded} XP</p>}
+                        {entry.readinessPoints > 0 && (
+                          <p className={`mt-1 ${readinessColor(entry.readinessCategory).split(" ")[0]}`}>
+                            +{entry.readinessPoints} {entry.readinessCategory}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    {entry.description && <p className="mt-3 text-sm text-slate-300">{entry.description}</p>}
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
         </section>
       </div>
     </main>

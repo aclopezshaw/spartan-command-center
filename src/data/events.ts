@@ -29,6 +29,18 @@ export type SpartanEvent = {
   readinessRequirements?: EventReadinessRequirements;
 };
 
+/**
+ * An Event record resolved from Notion. Scheduling and readiness requirements
+ * come from the Events database; the catalog below supplies legacy display
+ * copy and artwork only while those presentation fields are not stored there.
+ */
+export type CampaignEvent = SpartanEvent & {
+  pageId: string;
+  phaseId: string | null;
+  persistedStatus: "Locked" | "Active" | "Failed" | "Defeated" | "Unknown";
+  completedAt: string | null;
+};
+
 export const eventCatalog: SpartanEvent[] = [
   {
     id: "candidate-inspection",

@@ -1,46 +1,63 @@
 import { NextResponse } from "next/server";
-import { eventCatalog } from "@/data/events";
 import { evaluateEventReadiness } from "@/lib/event-readiness";
+import { getActiveEvent } from "@/lib/events";
 import {
   completeCampaignEvent,
   findCampaignEvent,
+  getActiveCampaignEventState,
   getAlexReadinessScores,
   getAlexServiceRecordPageId,
+  getCompletedCampaignEventIds,
   isCampaignEventCompleted,
   markCampaignEventFailed,
 } from "@/lib/notion";
 
 type CompleteEventRequest = {
   eventId?: unknown;
-  campaignDay?: unknown;
 };
 
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as CompleteEventRequest;
     const eventId = typeof body.eventId === "string" ? body.eventId : null;
-    const campaignDay =
-      typeof body.campaignDay === "number" && Number.isInteger(body.campaignDay)
-        ? body.campaignDay
-        : null;
 
-    if (!eventId || !campaignDay || campaignDay < 1) {
+    if (!eventId) {
       return NextResponse.json({ error: "Invalid event completion request" }, { status: 400 });
     }
 
-    const event = eventCatalog.find((candidate) => candidate.id === eventId);
+    const eventState = await getActiveCampaignEventState();
+    const campaignDay = eventState.campaignDay;
+    const event = eventState.events.find((candidate) => candidate.id === eventId);
     if (!event) {
-      return NextResponse.json({ error: "Unknown campaign event" }, { status: 404 });
+      return NextResponse.json({ error: "Event is not part of the active campaign phase" }, { status: 409 });
     }
 
-    if (campaignDay < event.unlockDay) {
+    if (!campaignDay || campaignDay < event.unlockDay) {
       return NextResponse.json({ error: "Event is not available yet" }, { status: 409 });
     }
 
-    const eventPage = await findCampaignEvent(event.id);
+    const completedEventIds = await getCompletedCampaignEventIds(eventState.events);
+    const activeEvent = getActiveEvent(
+      campaignDay,
+      completedEventIds,
+      eventState.events
+    );
+
+    if (activeEvent?.id !== event.id) {
+      return NextResponse.json(
+        { error: "Complete earlier active events before reviewing this event" },
+        { status: 409 }
+      );
+    }
+
+    const eventPage = await findCampaignEvent(event.id, event.pageId);
     if (!eventPage) {
       console.error("Campaign event record not found", { eventId: event.id });
       return NextResponse.json({ error: "Campaign event record not found" }, { status: 500 });
+    }
+
+    if (eventPage.phaseId !== eventState.phaseId) {
+      return NextResponse.json({ error: "Campaign event phase changed. Refresh and try again." }, { status: 409 });
     }
 
     if (await isCampaignEventCompleted(eventPage)) {

@@ -34,7 +34,7 @@ The diagram describes current connections, not desired security or persistence b
 
 - `src/app/page.tsx` exposes the public login page through `LoginPage`.
 - `src/app/(protected)/layout.tsx` wraps eight protected page routes through `ProtectedLayout`.
-- `src/app/api/**/route.ts` exposes 16 HTTP endpoints.
+- `src/app/api/**/route.ts` exposes 21 HTTP endpoints.
 - `src/app/components` contains shared presentation and interactive components.
 - `src/lib` contains shared Notion, achievement, event, and date logic.
 - `src/data/events.ts` is the repository-owned event catalog.
@@ -52,7 +52,7 @@ The `(protected)` route group organizes pages without changing their URLs, consi
 
 ### Client Components
 
-The Medical Unit, Intel Reports, and Training Reports pages declare `"use client"` and fetch Route Handlers after rendering. `EventSystem`, `HudCheckbox`, and `NavBar` are also Client Components because they use browser storage, state, navigation hooks, or event handlers.
+The Medical Unit, Intel Reports, and Training Reports pages declare `"use client"` and fetch Route Handlers after rendering. `EventSystem`, `HudCheckbox`, and `NavBar` are also Client Components because they use state, navigation hooks, or event handlers.
 
 The repository currently has no `loading.tsx` or `error.tsx` boundaries.
 
@@ -89,13 +89,20 @@ Schema mapping, pagination, authorization, and error translation are still distr
 
 Daily record selection and hydration aggregation now share the America/Denver operational calendar accepted in [ADR-0003](adr/0003-denver-operational-time.md).
 
+### Workout update
+
+1. `TrainingReportsPage.submitWorkout` sends controlled workout fields to `/api/workout-log`.
+2. The Route Handler verifies the current session, validates category, duration, distance, RPE, and notes, then creates the Notion Workout Log record.
+3. After a successful write, the page refreshes the authenticated weekly workout count and phase totals.
+4. Phase hydration and workout totals derive their start date from the active campaign's authoritative campaign day rather than a repository date constant.
+
 ### Event completion
 
-1. `EventSystem` derives the active event from `eventCatalog` and browser-local completed IDs.
-2. As an interim fallback for SDCB #187, the browser immediately adds the event ID to local state and `localStorage` so a failed backend request does not block local completion.
-3. It makes a best-effort post of client-supplied event metadata to `/api/complete-event`.
-4. When the request succeeds, the Route Handler optionally resolves Event and Service Record relations and calls the shared `createServiceHistoryEntry` helper to create a Service History page in Notion.
-5. A failed request is logged but does not roll back browser-local completion. Backend history, rewards, and cross-device completion remain unresolved.
+1. `getActiveCampaignEventState` loads Event records from Notion, resolves their related Campaign Operations phase records, and returns the active campaign name, phase name, next phase name, phase length, schedule, and authoritative campaign day. Event records without a legacy `Event ID` use their stable Notion page ID for application identity, while completion is derived directly from the resolved record and linked history.
+2. `EventSystem` loads that server-derived state from `/api/events/status`, derives the current or next phase event, and keeps local state only after a successful completion response.
+3. `/api/complete-event` accepts only an event identifier; it rejects events outside the active phase, events before their scheduled campaign day, and later events while an earlier one is unresolved.
+4. The Route Handler evaluates authoritative readiness, writes `Failed` only for an unsuccessful review, and on success creates the linked Service History entry before writing the Event record as `Defeated` with a Denver date key.
+5. Legacy catalog entries remain presentation fallbacks for event copy and artwork while scheduling, readiness requirements, phase scope, and completion state come from Notion.
 
 ### Academic assignment flow
 
@@ -107,7 +114,7 @@ Daily record selection and hydration aggregation now share the America/Denver op
 
 ## Security boundary
 
-Every Route Handler is a public HTTP entry point and must eventually verify authorization independently. The current `ProtectedLayout` protects page rendering only. `proxy.disabled.ts` is disabled by filename and would still not replace authorization checks if enabled.
+Every Route Handler is a public HTTP entry point and must verify authorization independently. The workout logging and phase-metric handlers use `hasAuthorizedSession`; many older handlers remain unguarded. The current `ProtectedLayout` protects page rendering only. `proxy.disabled.ts` is disabled by filename and would still not replace authorization checks if enabled.
 
 The current static cookie implementation and unguarded Route Handlers are tracked by [SDCB #192](https://app.notion.com/p/39cbc7d80f45818293afd11fc4c17bae).
 
@@ -116,7 +123,7 @@ The current static cookie implementation and unguarded Route Handlers are tracke
 | Data | Current persistence |
 | --- | --- |
 | SITREP, weekly operations, hydration, assignments, achievements, books, reading reports, service history | Notion |
-| Event completion IDs | Browser `localStorage` |
+| Event completion state | Notion Events and linked Service History records |
 | Mobile hydration | Server-process memory |
 | Mobile intel reports | Not persisted |
 | Static campaign, promotion, Armory, recommendations, and several SMU values | Repository constants or placeholder JSX |
