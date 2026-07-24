@@ -107,5 +107,75 @@ export const eventCatalog: SpartanEvent[] = [
         minimum: 2,
       },
     },
-  }
+  },
+  {
+    id: "fireteam-coordination-drill",
+    title: "Fireteam Coordination Drill",
+    type: "Minor Event",
+    unlockDay: 5,
+    location: "Fireteam Training Complex",
+    prompt:
+      "Fireteam coordination evaluation initialized. Requirement: Professional Readiness score of at least 3.",
+    buttonText: "Begin Coordination Drill",
+    backgroundImage: "/images/events/fireteam-coordination-drill.png",
+    xpReward: 250,
+    readinessRequirements: { minimums: { professional: 3 } },
+  },
+  {
+    id: "casualty-evacuation-simulation",
+    title: "Casualty Evacuation Simulation",
+    type: "Minor Event",
+    unlockDay: 10,
+    location: "Combat Medical Training Site",
+    prompt:
+      "Casualty evacuation simulation initialized. Requirement: Recovery Readiness score of at least 3.",
+    buttonText: "Begin Evacuation",
+    backgroundImage: "/images/events/casualty-evacuation-simulation.png",
+    xpReward: 250,
+    readinessRequirements: { minimums: { recovery: 3 } },
+  },
+  {
+    id: "tactical-obstacle-course-trial",
+    title: "Tactical Obstacle Course Trial",
+    type: "Minor Event",
+    unlockDay: 15,
+    location: "Mobility Training Grounds",
+    prompt:
+      "Tactical obstacle course trial initialized. Requirement: Physical Readiness score of at least 3.",
+    buttonText: "Enter the Course",
+    backgroundImage: "/images/events/tactical-obstacle-course-trial.png",
+    xpReward: 250,
+    readinessRequirements: { minimums: { physical: 3 } },
+  },
+  {
+    id: "squad-navigation-challenge",
+    title: "Squad Navigation Challenge",
+    type: "Minor Event",
+    unlockDay: 20,
+    location: "Wilderness Navigation Range",
+    prompt:
+      "Squad navigation challenge initialized. Requirement: Intelligence Readiness score of at least 3.",
+    buttonText: "Plot the Route",
+    backgroundImage: "/images/events/squad-navigation-challenge.png",
+    xpReward: 250,
+    readinessRequirements: { minimums: { intelligence: 3 } },
+  },
+  {
+    id: "fireteam-battle-assessment",
+    title: "Fireteam Battle Assessment",
+    type: "Major Event",
+    unlockDay: 25,
+    location: "SCP Battle Assessment Arena",
+    prompt:
+      "Fireteams are assembling for the Phase II competitive assessment. Requirement: at least one Readiness score of 4 or higher.",
+    buttonText: "Enter the Assessment",
+    backgroundImage: "/images/events/fireteam-battle-assessment.png",
+    xpReward: 500,
+    readinessRequirements: {
+      atLeastOne: {
+        keys: ["physical", "recovery", "intelligence", "professional"],
+        minimum: 4,
+      },
+    },
+  },
 ];
