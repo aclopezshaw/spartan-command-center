@@ -1,14 +1,24 @@
 import { NextResponse } from "next/server";
-import { eventCatalog } from "@/data/events";
-import { getCompletedCampaignEventIds } from "@/lib/notion";
+import {
+  getActiveCampaignEventState,
+  getCompletedCampaignEventIds,
+} from "@/lib/notion";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const completedEventIds = await getCompletedCampaignEventIds(
-      eventCatalog.map((event) => event.id)
-    );
+    const eventState = await getActiveCampaignEventState();
+    const completedEventIds = await getCompletedCampaignEventIds(eventState.events);
 
-    return NextResponse.json({ completedEventIds });
+    return NextResponse.json({
+      completedEventIds,
+      campaignDay: eventState.campaignDay,
+      phase: eventState.phaseId
+        ? { id: eventState.phaseId, name: eventState.phaseName }
+        : null,
+      events: eventState.events,
+    });
   } catch (error) {
     console.error("Failed to load event status", error);
     return NextResponse.json(
