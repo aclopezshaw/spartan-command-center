@@ -114,7 +114,7 @@ Daily record selection and hydration aggregation now share the America/Denver op
 
 ## Security boundary
 
-Every Route Handler is a public HTTP entry point and must verify authorization independently. The workout logging and phase-metric handlers use `hasAuthorizedSession`; many older handlers remain unguarded. The current `ProtectedLayout` protects page rendering only. `proxy.disabled.ts` is disabled by filename and would still not replace authorization checks if enabled.
+Every Route Handler is a public HTTP entry point and must verify authorization independently. The workout logging, phase-metric, and Focus Queue mutation handlers use `hasAuthorizedSession`; many older handlers remain unguarded. The current `ProtectedLayout` protects page rendering only. `proxy.disabled.ts` is disabled by filename and would still not replace authorization checks if enabled.
 
 The current static cookie implementation and unguarded Route Handlers are tracked by [SDCB #192](https://app.notion.com/p/39cbc7d80f45818293afd11fc4c17bae).
 
