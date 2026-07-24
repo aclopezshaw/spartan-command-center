@@ -109,12 +109,13 @@ Daily record selection and hydration aggregation now share the America/Denver op
 1. `MedicalUnitPage` calls `/api/smu/orders` and `/api/smu/pipeline`.
 2. Route Handlers query the Assignments data source.
 3. The orders endpoint returns focus, due-soon, and critical groups.
-4. The pipeline endpoint paginates all assignments and calculates per-course totals.
-5. `/api/smu/orders/complete` updates an assignment Status to Complete.
+4. The pipeline endpoint paginates all assignments and calculates per-course required and optional completion, remaining weekly minutes, overdue work, skipped work, and the next exam.
+5. The authenticated quarter endpoint reads the active and up-next records from the Notion Quarters data source.
+6. `/api/smu/orders/complete` updates an assignment Status to Complete.
 
 ## Security boundary
 
-Every Route Handler is a public HTTP entry point and must verify authorization independently. The workout logging, phase-metric, and Focus Queue mutation handlers use `hasAuthorizedSession`; many older handlers remain unguarded. The current `ProtectedLayout` protects page rendering only. `proxy.disabled.ts` is disabled by filename and would still not replace authorization checks if enabled.
+Every Route Handler is a public HTTP entry point and must verify authorization independently. The workout logging, phase-metric, Focus Queue mutation, and academic-quarter handlers use `hasAuthorizedSession`; many older handlers remain unguarded. The current `ProtectedLayout` protects page rendering only. `proxy.disabled.ts` is disabled by filename and would still not replace authorization checks if enabled.
 
 The current static cookie implementation and unguarded Route Handlers are tracked by [SDCB #192](https://app.notion.com/p/39cbc7d80f45818293afd11fc4c17bae).
 

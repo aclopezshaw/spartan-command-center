@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { formatDueDate, getOperationalWeekRange } from "@/lib/date";
+import {
+    formatDueDate,
+    getOperationalDateKey,
+    getOperationalWeekRange,
+} from "@/lib/date";
 import { getNotionClient } from "@/lib/notion-client";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +15,8 @@ type Assignment = {
     dueDate: string | null;
     id: string;
     title: string;
+    priority: string;
+    estimatedMinutes: number;
 };
 
 function getSelectName(property: any) {
@@ -41,6 +47,8 @@ function normalizeAssignment(page: any): Assignment {
         dueDate: getDueDate(properties),
         id: page.id,
         title: properties.Assignment?.title?.[0]?.plain_text ?? "Untitled",
+        priority: getSelectName(properties.Priority) || "Low",
+        estimatedMinutes: properties["Est. Time"]?.number ?? 0,
     };
 }
 
@@ -90,6 +98,7 @@ export async function GET() {
             new Date(),
             1
         );
+        const todayDateKey = getOperationalDateKey();
 
         const courses = Array.from(
             new Set(assignments.map((a) => a.course).filter(Boolean))
@@ -114,6 +123,62 @@ export async function GET() {
             const quarterComplete = courseAssignments.filter((a) =>
                 isComplete(a.status)
             ).length;
+            const overdueCount = courseAssignments.filter(
+                (assignment) =>
+                    assignment.dueDate &&
+                    assignment.dueDate.split("T")[0] < todayDateKey &&
+                    !isComplete(assignment.status) &&
+                    assignment.priority !== "Optional"
+            ).length;
+            const skippedCount = courseAssignments.filter((assignment) =>
+                ["Skipped", "Excused", "Dropped"].includes(assignment.status)
+            ).length;
+            const nextExam =
+                courseAssignments
+                    .filter(
+                        (assignment) =>
+                            assignment.title.toLowerCase().includes("exam") &&
+                            assignment.dueDate &&
+                            assignment.dueDate.split("T")[0] >= todayDateKey &&
+                            !isComplete(assignment.status)
+                    )
+                    .sort((a, b) =>
+                        a.dueDate!.localeCompare(b.dueDate!)
+                    )[0]?.dueDate ?? null;
+            const remainingWeekAssignments = thisWeekAssignments.filter(
+                (assignment) =>
+                    !isComplete(assignment.status) &&
+                    !["Skipped", "Excused", "Dropped"].includes(
+                        assignment.status
+                    )
+            );
+            const weekMinutes = remainingWeekAssignments.reduce(
+                (sum, assignment) => sum + assignment.estimatedMinutes,
+                0
+            );
+            const weekOptionalMinutes = remainingWeekAssignments
+                .filter(
+                    (assignment) => assignment.priority === "Optional"
+                )
+                .reduce(
+                    (sum, assignment) =>
+                        sum + assignment.estimatedMinutes,
+                    0
+                );
+            const weekRequiredMinutes =
+                weekMinutes - weekOptionalMinutes;
+            const requiredWeek = thisWeekAssignments.filter(
+                (assignment) => assignment.priority !== "Optional"
+            );
+            const optionalWeek = thisWeekAssignments.filter(
+                (assignment) => assignment.priority === "Optional"
+            );
+            const requiredQuarter = courseAssignments.filter(
+                (assignment) => assignment.priority !== "Optional"
+            );
+            const optionalQuarter = courseAssignments.filter(
+                (assignment) => assignment.priority === "Optional"
+            );
 
             const weekTotal = thisWeekAssignments.length;
             const weekComplete = thisWeekAssignments.filter((a) =>
@@ -121,7 +186,12 @@ export async function GET() {
             ).length;
 
             const nextAssignment = courseAssignments
-                .filter((a) => a.dueDate && !isComplete(a.status))
+                .filter(
+                    (assignment) =>
+                        assignment.dueDate &&
+                        assignment.dueDate.split("T")[0] >= todayDateKey &&
+                        !isComplete(assignment.status)
+                )
                 .sort(
                     (a, b) =>
                         a.dueDate!.localeCompare(b.dueDate!)
@@ -136,6 +206,28 @@ export async function GET() {
                 weekTotal,
                 quarterComplete,
                 quarterTotal,
+                weekRequiredTotal: requiredWeek.length,
+                weekRequiredComplete: requiredWeek.filter((assignment) =>
+                    isComplete(assignment.status)
+                ).length,
+                weekOptionalTotal: optionalWeek.length,
+                weekOptionalComplete: optionalWeek.filter((assignment) =>
+                    isComplete(assignment.status)
+                ).length,
+                quarterRequiredTotal: requiredQuarter.length,
+                quarterRequiredComplete: requiredQuarter.filter(
+                    (assignment) => isComplete(assignment.status)
+                ).length,
+                quarterOptionalTotal: optionalQuarter.length,
+                quarterOptionalComplete: optionalQuarter.filter(
+                    (assignment) => isComplete(assignment.status)
+                ).length,
+                overdueCount,
+                skippedCount,
+                nextExam,
+                weekMinutes,
+                weekOptionalMinutes,
+                weekRequiredMinutes,
                 next: nextAssignment?.dueDate
                     ? `Next: ${formatDueDate(nextAssignment.dueDate)}`
                     : "No upcoming",
