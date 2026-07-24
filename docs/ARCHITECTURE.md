@@ -52,7 +52,7 @@ The `(protected)` route group organizes pages without changing their URLs, consi
 
 ### Client Components
 
-The Medical Unit, Intel Reports, and Training Reports pages declare `"use client"` and fetch Route Handlers after rendering. `EventSystem`, `HudCheckbox`, and `NavBar` are also Client Components because they use browser storage, state, navigation hooks, or event handlers.
+The Medical Unit, Intel Reports, and Training Reports pages declare `"use client"` and fetch Route Handlers after rendering. `EventSystem`, `HudCheckbox`, and `NavBar` are also Client Components because they use state, navigation hooks, or event handlers.
 
 The repository currently has no `loading.tsx` or `error.tsx` boundaries.
 
@@ -123,7 +123,7 @@ The current static cookie implementation and unguarded Route Handlers are tracke
 | Data | Current persistence |
 | --- | --- |
 | SITREP, weekly operations, hydration, assignments, achievements, books, reading reports, service history | Notion |
-| Event completion IDs | Browser `localStorage` |
+| Event completion state | Notion Events and linked Service History records |
 | Mobile hydration | Server-process memory |
 | Mobile intel reports | Not persisted |
 | Static campaign, promotion, Armory, recommendations, and several SMU values | Repository constants or placeholder JSX |
