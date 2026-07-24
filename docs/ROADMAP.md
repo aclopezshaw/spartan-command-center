@@ -118,6 +118,7 @@ Roster and dossiers:
 
 Fireteam identity:
 
+- **Planned.** The canonical identity is **Fireteam Epsilon**, with the motto **FIVE, FORWARD.** and the approved five-spear cobalt-and-gunmetal patch under [SDCB #151](https://app.notion.com/p/399bc7d80f45818793cdf215d092b463). The production asset is `public/images/fireteam/fireteam-epsilon-patch.png`; product integration remains part of 0.7.0 Fireteam Identity & Dossiers.
 - The canonical name, military designation, emblem, motto, visual palette, and patch are approved.
 - Identity is consistent across the ceremony, roster, dossiers, navigation, Service Record, and later Fireteam systems.
 - Placeholder identity or temporary artwork is not represented as final canonical content.
@@ -175,6 +176,7 @@ The complete decision is recorded in [ADR-0006](adr/0006-command-school-trust-an
 
 Current milestone rules include:
 
+- **Planned.** The canonical Phase III leadership identity is **Athena Command**, with the motto **WISDOM UNDER FIRE.** and the approved helmet, cobalt-shield, and five-spear patch under [SDCB #152](https://app.notion.com/p/399bc7d80f4581ff82e4d041beef0a72). The production asset is `public/images/command/athena-command-patch.png`; authoritative assignment and product integration remain part of 0.8.0.
 - Command Assignment persists once before the ceremony, history, or Command Trust unlock is considered complete. [SDCB #266](https://app.notion.com/39ebc7d80f4581ebb981ce9d9d56e1de).
 - Command Trust uses authoritative, attributable, idempotent state changes. [SDCB #258](https://app.notion.com/39ebc7d80f458103b2a7fc3e771b4f05).
 - Consistent qualifying behavior produces gains; sustained non-completion of eligible habits may produce gradual bounded losses.
