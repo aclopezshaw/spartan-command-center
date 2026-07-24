@@ -1,4 +1,12 @@
-import { addDaysToDateKey, getOperationalDateKey } from "@/lib/date";
+import {
+  addDaysToDateKey,
+  getOperationalDateKey,
+  getOperationalWeekRange,
+} from "@/lib/date";
+import {
+  createAchievementServiceHistoryEntry,
+  hasServiceHistoryForAchievement,
+} from "@/lib/notion";
 import {
   getNotionClient,
   getRequiredNotionId,
@@ -18,6 +26,8 @@ type Achievement = {
   track: AchievementTrack;
   reqValue: number;
   dateEarned?: string | null;
+  category: string;
+  description: string;
 };
 
 export async function getUnearnedAchievements() {
@@ -89,6 +99,33 @@ async function getDailyCheckboxStats(
   };
 }
 
+async function getWeeklyCheckboxStats(propertyName: string): Promise<ObjectiveStats> {
+  const notion = getNotionClient();
+  const dataSourceId = getRequiredNotionId("WEEKLY_OPERATIONS_DATABASE_ID");
+  const response = await notion.dataSources.query({
+    data_source_id: dataSourceId,
+    filter: {
+      property: propertyName,
+      checkbox: { equals: true },
+    },
+  });
+  const completedWeeks = response.results
+    .map((page: any) => page.properties?.["Week Start"]?.date?.start)
+    .filter(Boolean)
+    .map((value: string) => value.split("T")[0]);
+  const completed = new Set(completedWeeks);
+  const { startDateKey: currentWeek } = getOperationalWeekRange(new Date(), 0);
+  let cursor = currentWeek;
+  if (!completed.has(cursor)) cursor = addDaysToDateKey(cursor, -7);
+  let currentStreak = 0;
+  while (completed.has(cursor)) {
+    currentStreak += 1;
+    cursor = addDaysToDateKey(cursor, -7);
+  }
+
+  return { totalCompletions: completedWeeks.length, currentStreak };
+}
+
 async function getObjectiveStats(objective: string): Promise<ObjectiveStats> {
   switch (objective) {
     case "Water":
@@ -112,8 +149,14 @@ async function getObjectiveStats(objective: string): Promise<ObjectiveStats> {
     case "Read":
       return getDailyCheckboxStats("Read");
 
-   //case "Plan":
-      //return getWeeklyCheckboxStats("Plan Week");
+    case "Workout":
+      return getWeeklyCheckboxStats("Workouts");
+
+    case "Shot":
+      return getWeeklyCheckboxStats("Shot");
+
+    case "Plan":
+      return getWeeklyCheckboxStats("Planning");
 
     default:
       return {
@@ -138,9 +181,11 @@ function isAchievementEarned(
   return false;
 }
 
-async function awardAchievement(achievementId: string, date: string) {
+async function awardAchievement(achievement: Achievement, date: string) {
+  const historyExists = await hasServiceHistoryForAchievement(achievement.id);
+
   await getNotionClient().pages.update({
-    page_id: achievementId,
+    page_id: achievement.id,
     properties: {
       "Date Earned": {
         date: {
@@ -149,6 +194,16 @@ async function awardAchievement(achievementId: string, date: string) {
       },
     },
   });
+
+  if (!historyExists) {
+    await createAchievementServiceHistoryEntry({
+      achievementPageId: achievement.id,
+      achievementTitle: achievement.name,
+      category: achievement.category,
+      description: achievement.description,
+      earnedAt: date,
+    });
+  }
 }
 
 function mapAchievement(raw: any): Achievement {
@@ -170,6 +225,11 @@ function mapAchievement(raw: any): Achievement {
 
     dateEarned:
       props["Date Earned"]?.date?.start ?? null,
+    category: props["Category"]?.select?.name ?? "None",
+    description:
+      props["Description"]?.formula?.string ??
+      props["Description"]?.rich_text?.[0]?.plain_text ??
+      "",
   };
 }
 
@@ -193,7 +253,7 @@ export async function evaluateAchievements() {
     const stats = await getObjectiveStats(achievement.objective);
 
     if (isAchievementEarned(achievement, stats)) {
-      await awardAchievement(achievement.id, today);
+      await awardAchievement(achievement, today);
       awarded.push(achievement.name);
     }
   }
