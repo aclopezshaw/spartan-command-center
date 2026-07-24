@@ -1,9 +1,49 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import HudPanel from "../../components/HudPanel";
 import NavBar from "../../components/NavBar";
 import PageHeader from "../../components/PageHeader";
+
+type WorkoutMetrics = {
+    minutes: number;
+    miles: number;
+    hydrationAverage: number;
+    weeklyCount: number;
+};
+
+async function fetchHydrationTotal() {
+    const response = await fetch("/api/hydration-total");
+
+    if (!response.ok) {
+        throw new Error("Failed to load hydration total");
+    }
+
+    const data = await response.json();
+    return data.total ?? 0;
+}
+
+async function fetchWorkoutMetrics(): Promise<WorkoutMetrics> {
+    const [summaryResponse, hydrationResponse, weeklyResponse] =
+        await Promise.all([
+            fetch("/api/workout-summary", { cache: "no-store" }),
+            fetch("/api/hydration-phase-average", { cache: "no-store" }),
+            fetch("/api/workout-weekly-count", { cache: "no-store" }),
+        ]);
+
+    const [summary, hydration, weekly] = await Promise.all([
+        summaryResponse.ok ? summaryResponse.json() : null,
+        hydrationResponse.ok ? hydrationResponse.json() : null,
+        weeklyResponse.ok ? weeklyResponse.json() : null,
+    ]);
+
+    return {
+        minutes: summary?.minutes ?? 0,
+        miles: summary?.miles ?? 0,
+        hydrationAverage: hydration?.average ?? 0,
+        weeklyCount: weekly?.count ?? 0,
+    };
+}
 
 export default function TrainingReportsPage() {
 
@@ -15,32 +55,83 @@ export default function TrainingReportsPage() {
     const [weeklyWorkoutCount, setWeeklyWorkoutCount] = useState(0);
     const [workout, setWorkout] = useState({ type: "Strength", category: "Strength", duration: "", distance: "", rpe: "3", notes: "" });
     const [workoutStatus, setWorkoutStatus] = useState("");
+    const [workoutSubmitting, setWorkoutSubmitting] = useState(false);
 
-    async function submitWorkout() {
-        setWorkoutStatus("Submitting...");
-        const response = await fetch("/api/workout-log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(workout) });
-        setWorkoutStatus(response.ok ? "Workout logged." : "Unable to log workout.");
-        if (response.ok) { setWorkout({ ...workout, duration: "", distance: "", notes: "" }); }
-    }
     const hydrationProgress = hydrationTotal/96;
 
-    useEffect(() => {
-        loadHydrationTotal();
-        fetch("/api/workout-summary", { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((data) => data && setWorkoutTotals(data));
-        fetch("/api/hydration-phase-average", { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((data) => data && setPhaseHydrationAverage(data.average ?? 0));
-        fetch("/api/workout-weekly-count", { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((data) => data && setWeeklyWorkoutCount(data.count ?? 0));
+    const loadWorkoutMetrics = useCallback(async () => {
+        const metrics = await fetchWorkoutMetrics();
+        setWorkoutTotals({
+            minutes: metrics.minutes,
+            miles: metrics.miles,
+        });
+        setPhaseHydrationAverage(metrics.hydrationAverage);
+        setWeeklyWorkoutCount(metrics.weeklyCount);
     }, []);
 
-    async function loadHydrationTotal() {
-        const response = await fetch("/api/hydration-total");
-
-        if (!response.ok) {
-            console.error("Failed to load hydration total");
-            return;
+    const loadHydrationTotal = useCallback(async () => {
+        try {
+            setHydrationTotal(await fetchHydrationTotal());
+        } catch (error) {
+            console.error("Failed to load hydration total", error);
         }
+    }, []);
 
-        const data = await response.json();
-        setHydrationTotal(data.total ?? 0);
+    useEffect(() => {
+        let cancelled = false;
+
+        void Promise.all([
+            fetchHydrationTotal(),
+            fetchWorkoutMetrics(),
+        ]).then(([total, metrics]) => {
+            if (cancelled) return;
+
+            setHydrationTotal(total);
+            setWorkoutTotals({
+                minutes: metrics.minutes,
+                miles: metrics.miles,
+            });
+            setPhaseHydrationAverage(metrics.hydrationAverage);
+            setWeeklyWorkoutCount(metrics.weeklyCount);
+        }).catch((error) => {
+            console.error("Failed to load training metrics", error);
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    async function submitWorkout() {
+        if (workoutSubmitting) return;
+
+        setWorkoutSubmitting(true);
+        setWorkoutStatus("Submitting...");
+
+        try {
+            const response = await fetch("/api/workout-log", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(workout),
+            });
+            const result = await response.json();
+
+            if (!response.ok) {
+                setWorkoutStatus(result.error ?? "Unable to log workout.");
+                return;
+            }
+
+            setWorkoutStatus("Workout logged.");
+            setWorkout((current) => ({
+                ...current,
+                duration: "",
+                distance: "",
+                notes: "",
+            }));
+            await loadWorkoutMetrics();
+        } finally {
+            setWorkoutSubmitting(false);
+        }
     }
 
     async function submitHydration(amount: number) {
@@ -65,7 +156,7 @@ export default function TrainingReportsPage() {
         setHydrationStatus(`${amount} oz logged.`);
         setHydrationAmount("");
 
-        loadHydrationTotal();
+        await loadHydrationTotal();
     }
 
   return (
@@ -217,8 +308,12 @@ export default function TrainingReportsPage() {
                 </label>
 
                 <div className="md:col-span-2">
-                    <button onClick={submitWorkout} className="border border-green-500 bg-green-950/40 px-5 py-3 text-sm font-bold uppercase tracking-[0.25em] text-green-100 hover:bg-green-800/50">
-                    Submit Workout
+                    <button
+                        onClick={submitWorkout}
+                        disabled={workoutSubmitting}
+                        className="border border-green-500 bg-green-950/40 px-5 py-3 text-sm font-bold uppercase tracking-[0.25em] text-green-100 hover:bg-green-800/50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                    {workoutSubmitting ? "Submitting..." : "Submit Workout"}
                     </button>
                     {workoutStatus && <p className="mt-2 text-sm text-green-300">{workoutStatus}</p>}
                 </div>

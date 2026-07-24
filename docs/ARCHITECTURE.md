@@ -34,7 +34,7 @@ The diagram describes current connections, not desired security or persistence b
 
 - `src/app/page.tsx` exposes the public login page through `LoginPage`.
 - `src/app/(protected)/layout.tsx` wraps eight protected page routes through `ProtectedLayout`.
-- `src/app/api/**/route.ts` exposes 16 HTTP endpoints.
+- `src/app/api/**/route.ts` exposes 21 HTTP endpoints.
 - `src/app/components` contains shared presentation and interactive components.
 - `src/lib` contains shared Notion, achievement, event, and date logic.
 - `src/data/events.ts` is the repository-owned event catalog.
@@ -89,6 +89,13 @@ Schema mapping, pagination, authorization, and error translation are still distr
 
 Daily record selection and hydration aggregation now share the America/Denver operational calendar accepted in [ADR-0003](adr/0003-denver-operational-time.md).
 
+### Workout update
+
+1. `TrainingReportsPage.submitWorkout` sends controlled workout fields to `/api/workout-log`.
+2. The Route Handler verifies the current session, validates category, duration, distance, RPE, and notes, then creates the Notion Workout Log record.
+3. After a successful write, the page refreshes the authenticated weekly workout count and phase totals.
+4. Phase hydration and workout totals derive their start date from the active campaign's authoritative campaign day rather than a repository date constant.
+
 ### Event completion
 
 1. `EventSystem` derives the active event from `eventCatalog` and browser-local completed IDs.
@@ -107,7 +114,7 @@ Daily record selection and hydration aggregation now share the America/Denver op
 
 ## Security boundary
 
-Every Route Handler is a public HTTP entry point and must eventually verify authorization independently. The current `ProtectedLayout` protects page rendering only. `proxy.disabled.ts` is disabled by filename and would still not replace authorization checks if enabled.
+Every Route Handler is a public HTTP entry point and must verify authorization independently. The workout logging and phase-metric handlers use `hasAuthorizedSession`; many older handlers remain unguarded. The current `ProtectedLayout` protects page rendering only. `proxy.disabled.ts` is disabled by filename and would still not replace authorization checks if enabled.
 
 The current static cookie implementation and unguarded Route Handlers are tracked by [SDCB #192](https://app.notion.com/p/39cbc7d80f45818293afd11fc4c17bae).
 
