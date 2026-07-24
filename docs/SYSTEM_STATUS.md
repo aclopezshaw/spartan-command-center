@@ -22,7 +22,7 @@ This document distinguishes current implementation from intended behavior. “Im
 
 | Surface | Status | Verified implementation | Known gaps |
 | --- | --- | --- | --- |
-| Login and protected routes | Partially implemented | `LoginPage`, login `POST`, and `ProtectedLayout` provide a form, cookie, and redirect boundary. The workout and phase-metric Route Handlers verify the session with `hasAuthorizedSession`. | Cookie is forgeable; many older private Route Handlers do not verify it. [SDCB #192](https://app.notion.com/p/39cbc7d80f45818293afd11fc4c17bae). |
+| Login and protected routes | Partially implemented | `LoginPage`, login `POST`, and `ProtectedLayout` provide a form, cookie, and redirect boundary. The workout, phase-metric, and Focus Queue mutation Route Handlers verify the session with `hasAuthorizedSession`. | Cookie is forgeable; many older private Route Handlers do not verify it. [SDCB #192](https://app.notion.com/p/39cbc7d80f45818293afd11fc4c17bae). |
 | Command HUD | Partially implemented | `CommandHudPage` loads the Service Record, current SITREP, weekly operations, workout count, and event system. Campaign day, Sunday week start, and time-sensitive background selection use the shared America/Denver operational-time helpers. The inactive 100% Shield placeholder was removed under [SDCB #238](https://app.notion.com/39ebc7d80f458111b201effe3eac3788); no unsupported health replacement is rendered. | Optimistic-save failures, hardcoded campaign start, and hardcoded readiness copy remain. [SDCB #197](https://app.notion.com/p/39cbc7d80f4581f6b463c3174d27bc7b). |
 | Daily SITREP | Implemented with technical debt | `getTodaySitrep` retrieves or creates the Denver-dated record; `updateDailySitrepCheckbox` mutates checkboxes. | Property names are accepted from request bodies without an allowlist; mutations lack authorization. |
 | Weekly Operations | Implemented with technical debt | `getOrCreateWeeklyOperations` retrieves or creates the current Denver-dated Sunday-start record; the HUD updates Workouts, Shot, and Planning. | Concurrent creation is not guarded; mutations lack authorization; the Sunday convention differs from the academic pipeline's explicit Monday convention. |
@@ -41,7 +41,7 @@ This document distinguishes current implementation from intended behavior. “Im
 
 ## Route Handler inventory
 
-All files below expose public HTTP entry points under the App Router. `hasAuthorizedSession` is the shared authorization guard for the workout and phase-metric routes; older handlers do not yet use it consistently.
+All files below expose public HTTP entry points under the App Router. `hasAuthorizedSession` is the shared authorization guard for the workout, phase-metric, and Focus Queue mutation routes; older handlers do not yet use it consistently.
 
 | Route | Methods | Status and side effect |
 | --- | --- | --- |
@@ -61,7 +61,7 @@ All files below expose public HTTP entry points under the App Router. `hasAuthor
 | `/api/intel-reports` | POST | Intended to create a Reading Report and update Current Page; client contract is broken. |
 | `/api/smu/orders` | GET | Reads and groups assignments using Denver-midnight query boundaries and Denver date normalization for due-soon and overdue windows. Implemented with filtering debt. |
 | `/api/smu/orders/complete` | POST | Marks a supplied Notion assignment Complete. |
-| `/api/smu/orders/focus` | POST | Authenticates the current session and marks a supplied Notion assignment for the Focus Queue. |
+| `/api/smu/orders/focus` | POST | Authenticates the current session, verifies the target belongs to Assignments, and marks it for the Focus Queue. |
 | `/api/smu/pipeline` | GET | Reads all assignments and calculates course progress. |
 | `/api/mobile/hud` | GET | Returns Daily SITREP values and hardcoded weekly values. |
 | `/api/mobile/hud/objective` | POST | Updates an allowlisted Daily SITREP objective. |

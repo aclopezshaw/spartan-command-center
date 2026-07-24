@@ -195,6 +195,8 @@ function AssignmentItem({
                         type="button"
                         onClick={() => onFocus(id)}
                         disabled={isFocusing}
+                        aria-label={`Add ${title} to Focus Queue`}
+                        title="Add to Focus Queue"
                         className="mt-2 text-[10px] uppercase tracking-[0.2em] text-cyan-500/70 transition hover:text-cyan-200 disabled:cursor-wait disabled:text-slate-600"
                     >
                         {isFocusing ? "Adding…" : "+ Focus"}
