@@ -4,7 +4,7 @@ import PageHeader from "../../components/PageHeader";
 export default function ArmoryPage() {
   return (
     <main className="min-h-screen bg-black p-6 font-mono text-slate-100">
-      <div className="mx-auto max-w-7xl space-y-6">
+      <div className="mx-auto max-w-6xl space-y-6">
         <NavBar />
 
         <section className="border border-cyan-600/60 bg-slate-950/90 p-6 shadow-[0_0_30px_rgba(8,145,178,0.25)]">
