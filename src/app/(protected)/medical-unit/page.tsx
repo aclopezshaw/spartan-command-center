@@ -159,12 +159,16 @@ function AssignmentItem({
     meta,
     priority,
     onComplete,
+    onFocus,
+    isFocusing = false,
 }: {
     id: string;
     title: string;
     meta: string;
     priority: string;
     onComplete: (id: string) => void;
+    onFocus?: (id: string) => void;
+    isFocusing?: boolean;
 }) {
     const color =
         priority?.toLowerCase() === "high"
@@ -181,11 +185,21 @@ function AssignmentItem({
                 className="mt-1 h-5 w-5 shrink-0 border border-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.7)]"
             />
 
-            <div>
+            <div className="min-w-0 flex-1">
                 <p className={`text-sm font-bold ${color}`}>{title}</p>
                 <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">
                     {meta}
                 </p>
+                {onFocus && (
+                    <button
+                        type="button"
+                        onClick={() => onFocus(id)}
+                        disabled={isFocusing}
+                        className="mt-2 text-[10px] uppercase tracking-[0.2em] text-cyan-500/70 transition hover:text-cyan-200 disabled:cursor-wait disabled:text-slate-600"
+                    >
+                        {isFocusing ? "Adding…" : "+ Focus"}
+                    </button>
+                )}
             </div>
         </div>
     );
@@ -224,6 +238,8 @@ export default function MedicalUnitPage() {
         nextCritical: [],
     });
     const [pipeline, setPipeline] = useState<PipelineCourse[]>([]);
+    const [focusingAssignmentId, setFocusingAssignmentId] = useState<string | null>(null);
+    const [focusError, setFocusError] = useState<string | null>(null);
 
     async function loadOrders() {
         const response = await fetch("/api/smu/orders");
@@ -255,6 +271,36 @@ export default function MedicalUnitPage() {
         });
 
         await Promise.all([loadOrders(), loadPipeline()]);
+    }
+
+    async function addToFocusQueue(id: string) {
+        setFocusingAssignmentId(id);
+        setFocusError(null);
+
+        try {
+            const response = await fetch("/api/smu/orders/focus", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ id }),
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error ?? "Unable to update the focus queue");
+            }
+
+            await loadOrders();
+        } catch (error) {
+            setFocusError(
+                error instanceof Error
+                    ? error.message
+                    : "Unable to update the focus queue"
+            );
+        } finally {
+            setFocusingAssignmentId(null);
+        }
     }
 
     return (
@@ -333,6 +379,11 @@ export default function MedicalUnitPage() {
                             </Panel>
 
                             <Panel title="Today's Orders">
+                                {focusError && (
+                                    <p className="mb-3 text-xs text-amber-300">
+                                        {focusError}
+                                    </p>
+                                )}
                                 <div className="grid gap-4 lg:grid-cols-3">
                                     <OrderColumn title="Focus Queue" count={orders.focusQueue.length}>
                                         {orders.focusQueue.length > 0 ? (
@@ -363,6 +414,8 @@ export default function MedicalUnitPage() {
                                                     id={item.id}
                                                     priority={item.priority}
                                                     onComplete={completeAssignment}
+                                                    onFocus={addToFocusQueue}
+                                                    isFocusing={focusingAssignmentId === item.id}
                                                 />
                                             ))
                                         ) : (
@@ -385,6 +438,8 @@ export default function MedicalUnitPage() {
                                                 id={item.id}
                                                 priority={item.priority}
                                                 onComplete={completeAssignment}
+                                                onFocus={addToFocusQueue}
+                                                isFocusing={focusingAssignmentId === item.id}
                                             />
                                             ))
                                         ) : (
