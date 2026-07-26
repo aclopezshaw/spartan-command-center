@@ -145,24 +145,18 @@ type CampaignPhasePage = {
     "Phase Status"?: { select?: { name?: string } | null };
     "Campaign Name"?: { title?: Array<{ plain_text?: string }> };
     "Phase Name"?: { rich_text?: Array<{ plain_text?: string }> };
-    "Campaign Phase"?: { rich_text?: Array<{ plain_text?: string }> };
     "Campaign Number"?: { number?: number | null };
     "Phase Number"?: { number?: number | null };
     "Phase Day"?: { formula?: { number?: number | null } };
-    "Campaign Day"?: { formula?: { number?: number | null } };
     "Phase Length"?: { number?: number | null };
     "Phase Start Date"?: { date?: { start?: string | null } | null };
     "Max Habit XP"?: { formula?: { number?: number | null } };
-    "Max Campaign XP"?: { formula?: { number?: number | null } };
     "Max Daily XP"?: { rollup?: { number?: number | null } };
     "Max Weekly XP"?: { rollup?: { number?: number | null } };
     "Max Event XP"?: { number?: number | null };
     "Bronze Threshold %"?: { number?: number | null };
     "Silver Threshold %"?: { number?: number | null };
     "Gold Threshold %"?: { number?: number | null };
-    "Bronze Readiness %"?: { number?: number | null };
-    "Silver Readiness %"?: { number?: number | null };
-    "Gold Readiness %"?: { number?: number | null };
     "Final Daily XP"?: { number?: number | null };
     "Final Weekly XP"?: { number?: number | null };
     "Final Event XP"?: { number?: number | null };
@@ -234,30 +228,18 @@ export type FrozenPhaseXpSnapshot = {
 };
 
 function getPhaseName(properties: CampaignPhasePage["properties"]) {
-  return (
-    properties["Phase Name"]?.rich_text?.[0]?.plain_text ??
-    properties["Campaign Phase"]?.rich_text?.[0]?.plain_text ??
-    null
-  );
+  return properties["Phase Name"]?.rich_text?.[0]?.plain_text ?? null;
 }
 
 function getMaxHabitXp(properties: CampaignPhasePage["properties"]) {
-  return (
-    properties["Max Habit XP"]?.formula?.number ??
-    properties["Max Campaign XP"]?.formula?.number ??
-    null
-  );
+  return properties["Max Habit XP"]?.formula?.number ?? null;
 }
 
 function getThresholdPercent(
   properties: CampaignPhasePage["properties"],
   medal: "Bronze" | "Silver" | "Gold"
 ) {
-  return (
-    properties[`${medal} Threshold %`]?.number ??
-    properties[`${medal} Readiness %`]?.number ??
-    null
-  );
+  return properties[`${medal} Threshold %`]?.number ?? null;
 }
 
 export type CampaignRolloverStatus = RolloverEvaluation & {

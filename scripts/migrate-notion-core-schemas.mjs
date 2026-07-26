@@ -101,6 +101,44 @@ function replacePropertyReference(expression, propertyId, replacement) {
   return updated;
 }
 
+function getPropertyReference(expression, propertyId) {
+  const reference = expression.match(
+    /\{\{notion:block_property:[^:]+:[^}]+\}\}/
+  )?.[0];
+
+  if (!reference) {
+    throw new Error("Formula does not contain a Notion property reference.");
+  }
+
+  return reference.replace(
+    /\{\{notion:block_property:[^:]+:/,
+    `{{notion:block_property:${propertyId}:`
+  );
+}
+
+function getReferencedPropertyIds(expression) {
+  return [
+    ...expression.matchAll(
+      /\{\{notion:block_property:([^:]+):[^}]+\}\}/g
+    ),
+  ].map((match) => match[1]);
+}
+
+function findOrphanedPropertyId(expression, schema) {
+  const knownIds = new Set(
+    Object.values(schema.properties ?? {}).map((property) => property.id)
+  );
+  const orphanedIds = [
+    ...new Set(
+      getReferencedPropertyIds(expression).filter(
+        (propertyId) => !knownIds.has(propertyId)
+      )
+    ),
+  ];
+
+  return orphanedIds.length === 1 ? orphanedIds[0] : null;
+}
+
 async function updateSchema(dataSourceId, properties) {
   if (Object.keys(properties).length === 0) return;
   if (dryRun) return;
@@ -146,31 +184,59 @@ async function migrateServiceRecord(dataSourceId) {
   }
 
   const dailyXpProperty = schema.properties?.["Total Daily XP Earned"];
+  const habitXpProperty = schema.properties?.["Habit XP Earned"];
+  const serviceScoreProperty = schema.properties?.["Service Score"];
 
   if (
     dailyXpProperty &&
+    habitXpProperty &&
+    serviceScoreProperty &&
     hasProperty(schema, "Calculated Rank") &&
-    hasProperty(schema, "Next Rank XP")
+    hasProperty(schema, "Next Rank XP") &&
+    hasProperty(schema, "XP To Next Rank") &&
+    hasProperty(schema, "Rank Progress %")
   ) {
+    const calculatedRankExpression = getFormulaExpression(
+      schema,
+      "Calculated Rank"
+    );
+    const nextRankXpExpression = getFormulaExpression(
+      schema,
+      "Next Rank XP"
+    );
+    const xpToNextRankExpression = getFormulaExpression(
+      schema,
+      "XP To Next Rank"
+    );
+    const rankProgressExpression = getFormulaExpression(
+      schema,
+      "Rank Progress %"
+    );
     const calculatedRank = replacePropertyReference(
-      getFormulaExpression(schema, "Calculated Rank"),
+      calculatedRankExpression,
       dailyXpProperty.id,
-      'prop("Service Score")'
+      getPropertyReference(
+        calculatedRankExpression,
+        serviceScoreProperty.id
+      )
     );
     const nextRankXp = replacePropertyReference(
-      getFormulaExpression(schema, "Next Rank XP"),
+      nextRankXpExpression,
       dailyXpProperty.id,
-      'prop("Service Score")'
+      getPropertyReference(nextRankXpExpression, serviceScoreProperty.id)
+    );
+    const xpToNextRank = replacePropertyReference(
+      xpToNextRankExpression,
+      habitXpProperty.id,
+      getPropertyReference(xpToNextRankExpression, serviceScoreProperty.id)
+    );
+    const rankProgress = replacePropertyReference(
+      rankProgressExpression,
+      habitXpProperty.id,
+      getPropertyReference(rankProgressExpression, serviceScoreProperty.id)
     );
 
     await updateSchema(dataSourceId, {
-      "Service Score": {
-        type: "formula",
-        formula: {
-          expression:
-            'prop("Habit XP Earned") + prop("Service History XP")',
-        },
-      },
       "Calculated Rank": {
         type: "formula",
         formula: { expression: calculatedRank },
@@ -181,16 +247,11 @@ async function migrateServiceRecord(dataSourceId) {
       },
       "XP To Next Rank": {
         type: "formula",
-        formula: {
-          expression: 'prop("Next Rank XP") - prop("Service Score")',
-        },
+        formula: { expression: xpToNextRank },
       },
       "Rank Progress %": {
         type: "formula",
-        formula: {
-          expression:
-            'round(prop("Service Score") / prop("Next Rank XP") * 100)',
-        },
+        formula: { expression: rankProgress },
       },
     });
   }
@@ -217,9 +278,9 @@ async function migrateServiceRecord(dataSourceId) {
         type: "select",
         select: {
           options: [
-            { name: "Active Duty", color: "green" },
-            { name: "Retired", color: "yellow" },
-            { name: "MIA", color: "red" },
+            { name: "Active Duty" },
+            { name: "Retired" },
+            { name: "MIA" },
           ],
         },
       },
@@ -271,6 +332,23 @@ async function migrateCampaignOperations(dataSourceId) {
     data_source_id: dataSourceId,
   });
   const pages = await queryAllPages(dataSourceId);
+  const campaignDayExpression = hasProperty(schema, "Campaign Day")
+    ? getFormulaExpression(schema, "Campaign Day")
+    : null;
+  const maxHabitXpExpression = hasProperty(schema, "Max Campaign XP")
+    ? getFormulaExpression(schema, "Max Campaign XP")
+    : hasProperty(schema, "Max Habit XP")
+      ? getFormulaExpression(schema, "Max Habit XP")
+      : null;
+  const startDateProperty = schema.properties?.["Start Date"];
+  const phaseStartDateProperty = schema.properties?.["Phase Start Date"];
+  const campaignLengthProperty = schema.properties?.["Campaign Length"];
+  const phaseLengthProperty = schema.properties?.["Phase Length"];
+  const maxHabitXpLengthDependency =
+    campaignLengthProperty?.id ??
+    (maxHabitXpExpression
+      ? findOrphanedPropertyId(maxHabitXpExpression, schema)
+      : null);
 
   for (const page of pages) {
     const campaignNumber = page.properties["Campaign Number"];
@@ -333,14 +411,55 @@ async function migrateCampaignOperations(dataSourceId) {
     data_source_id: dataSourceId,
   });
 
+  if (
+    hasProperty(schema, "Max Habit XP") &&
+    maxHabitXpExpression &&
+    maxHabitXpLengthDependency &&
+    phaseLengthProperty
+  ) {
+    await updateSchema(dataSourceId, {
+      "Max Habit XP": {
+        type: "formula",
+        formula: {
+          expression: replacePropertyReference(
+            maxHabitXpExpression,
+            maxHabitXpLengthDependency,
+            getPropertyReference(
+              maxHabitXpExpression,
+              phaseLengthProperty.id
+            )
+          ),
+        },
+      },
+    });
+  }
+
   if (hasProperty(schema, "Phase Day")) {
+    let phaseDayExpression =
+      campaignDayExpression &&
+      startDateProperty &&
+      phaseStartDateProperty
+        ? replacePropertyReference(
+            campaignDayExpression,
+            startDateProperty.id,
+            getPropertyReference(
+              campaignDayExpression,
+              phaseStartDateProperty.id
+            )
+          )
+        : getFormulaExpression(schema, "Phase Day");
+
+    if (!phaseDayExpression.includes("max(0, dateBetween")) {
+      phaseDayExpression = phaseDayExpression.replace(
+        /dateBetween\(now\(\), ([^,]+), "days"\) \+ 1/,
+        'max(0, dateBetween(now(), $1, "days") + 1)'
+      );
+    }
+
     await updateSchema(dataSourceId, {
       "Phase Day": {
         type: "formula",
-        formula: {
-          expression:
-            'if(empty(prop("Phase Start Date")), 0, dateBetween(now(), prop("Phase Start Date"), "days") + 1)',
-        },
+        formula: { expression: phaseDayExpression },
       },
     });
   }
