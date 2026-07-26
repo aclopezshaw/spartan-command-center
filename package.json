@@ -9,6 +9,7 @@
     "lint": "eslint",
     "lint:ratchet": "node scripts/check-lint-baseline.mjs",
     "migrate:event-retry-schema": "node --env-file=.env.local scripts/migrate-event-retry-schema.mjs",
+    "migrate:notion-core-schemas": "node --env-file=.env.local scripts/migrate-notion-core-schemas.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "validate:release": "npm run test && npm run typecheck && npm run lint:ratchet && npm run build",

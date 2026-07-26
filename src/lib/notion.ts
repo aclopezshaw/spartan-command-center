@@ -25,7 +25,6 @@ import {
   calculatePhaseXp,
   expandHabitXpCeilings,
   type CampaignMedal,
-  type CampaignMedalPace,
   type PhaseXpSummary,
 } from "@/lib/phase-xp";
 import {
@@ -145,17 +144,22 @@ type CampaignPhasePage = {
   properties: {
     "Phase Status"?: { select?: { name?: string } | null };
     "Campaign Name"?: { title?: Array<{ plain_text?: string }> };
+    "Phase Name"?: { rich_text?: Array<{ plain_text?: string }> };
     "Campaign Phase"?: { rich_text?: Array<{ plain_text?: string }> };
     "Campaign Number"?: { number?: number | null };
     "Phase Number"?: { number?: number | null };
+    "Phase Day"?: { formula?: { number?: number | null } };
     "Campaign Day"?: { formula?: { number?: number | null } };
     "Phase Length"?: { number?: number | null };
     "Phase Start Date"?: { date?: { start?: string | null } | null };
-    Status?: { select?: { name?: string } | null };
+    "Max Habit XP"?: { formula?: { number?: number | null } };
     "Max Campaign XP"?: { formula?: { number?: number | null } };
     "Max Daily XP"?: { rollup?: { number?: number | null } };
     "Max Weekly XP"?: { rollup?: { number?: number | null } };
     "Max Event XP"?: { number?: number | null };
+    "Bronze Threshold %"?: { number?: number | null };
+    "Silver Threshold %"?: { number?: number | null };
+    "Gold Threshold %"?: { number?: number | null };
     "Bronze Readiness %"?: { number?: number | null };
     "Silver Readiness %"?: { number?: number | null };
     "Gold Readiness %"?: { number?: number | null };
@@ -164,7 +168,6 @@ type CampaignPhasePage = {
     "Final Event XP"?: { number?: number | null };
     "Final Phase XP"?: { number?: number | null };
     "Final Max Phase XP"?: { number?: number | null };
-    "Final Medal Pace"?: { select?: { name?: string } | null };
     "Medal Earned"?: { select?: { name?: string } | null };
     "Phase Finalized At"?: { date?: { start?: string | null } | null };
     "XP Snapshot Version"?: { number?: number | null };
@@ -225,11 +228,37 @@ export type FrozenPhaseXpSnapshot = {
   eventXp: number;
   earnedXp: number;
   maxPhaseXp: number;
-  medalPace: CampaignMedalPace;
   medalEarned: CampaignMedal;
   finalizedAt: string;
   version: number;
 };
+
+function getPhaseName(properties: CampaignPhasePage["properties"]) {
+  return (
+    properties["Phase Name"]?.rich_text?.[0]?.plain_text ??
+    properties["Campaign Phase"]?.rich_text?.[0]?.plain_text ??
+    null
+  );
+}
+
+function getMaxHabitXp(properties: CampaignPhasePage["properties"]) {
+  return (
+    properties["Max Habit XP"]?.formula?.number ??
+    properties["Max Campaign XP"]?.formula?.number ??
+    null
+  );
+}
+
+function getThresholdPercent(
+  properties: CampaignPhasePage["properties"],
+  medal: "Bronze" | "Silver" | "Gold"
+) {
+  return (
+    properties[`${medal} Threshold %`]?.number ??
+    properties[`${medal} Readiness %`]?.number ??
+    null
+  );
+}
 
 export type CampaignRolloverStatus = RolloverEvaluation & {
   operationalDate: string;
@@ -489,8 +518,7 @@ export async function getActiveCampaignEventState(): Promise<CampaignEventState>
 
   const campaignName =
     activePhase.properties["Campaign Name"]?.title?.[0]?.plain_text ?? null;
-  const phaseName =
-    activePhase.properties["Campaign Phase"]?.rich_text?.[0]?.plain_text ?? null;
+  const phaseName = getPhaseName(activePhase.properties);
   const phaseNumber =
     activePhase.properties["Phase Number"]?.number ?? null;
   const campaignNumber =
@@ -525,36 +553,48 @@ export async function getActiveCampaignEventState(): Promise<CampaignEventState>
     });
     const nextPhase =
       nextPhaseResponse.results[0] as unknown as CampaignPhasePage | undefined;
-    nextPhaseName =
-      nextPhase?.properties["Campaign Phase"]?.rich_text?.[0]?.plain_text ??
-      null;
+    nextPhaseName = nextPhase
+      ? getPhaseName(nextPhase.properties)
+      : null;
   }
+
+  const phaseStartDate =
+    activePhase.properties["Phase Start Date"]?.date?.start?.slice(0, 10) ??
+    null;
+  const campaignDay = phaseStartDate
+    ? Math.max(
+        1,
+        differenceInDateKeys(phaseStartDate, getOperationalDateKey()) + 1
+      )
+    : null;
 
   return {
     phaseId: activePhase.id,
     campaignName,
     phaseName,
     nextPhaseName,
-    phaseStartDate:
-      activePhase.properties["Phase Start Date"]?.date?.start?.slice(0, 10) ??
-      null,
-    campaignDay:
-      activePhase.properties["Campaign Day"]?.formula?.number ?? null,
+    phaseStartDate,
+    campaignDay,
     phaseLength: activePhase.properties["Phase Length"]?.number ?? null,
     maxDailyXp:
       activePhase.properties["Max Daily XP"]?.rollup?.number ?? null,
     maxWeeklyXp:
       activePhase.properties["Max Weekly XP"]?.rollup?.number ?? null,
-    maxHabitXp:
-      activePhase.properties["Max Campaign XP"]?.formula?.number ?? null,
+    maxHabitXp: getMaxHabitXp(activePhase.properties),
     maxEventXp:
       activePhase.properties["Max Event XP"]?.number ?? null,
-    bronzeThresholdPercent:
-      activePhase.properties["Bronze Readiness %"]?.number ?? null,
-    silverThresholdPercent:
-      activePhase.properties["Silver Readiness %"]?.number ?? null,
-    goldThresholdPercent:
-      activePhase.properties["Gold Readiness %"]?.number ?? null,
+    bronzeThresholdPercent: getThresholdPercent(
+      activePhase.properties,
+      "Bronze"
+    ),
+    silverThresholdPercent: getThresholdPercent(
+      activePhase.properties,
+      "Silver"
+    ),
+    goldThresholdPercent: getThresholdPercent(
+      activePhase.properties,
+      "Gold"
+    ),
     events: applyRetrySchedule(
       events
         .map(toCampaignEvent)
@@ -811,14 +851,12 @@ function toRolloverPhase(page: CampaignPhasePage): RolloverPhase {
       "Unnamed Campaign",
     campaignNumber: page.properties["Campaign Number"]?.number ?? 0,
     phaseName:
-      page.properties["Campaign Phase"]?.rich_text?.[0]?.plain_text ??
-      "Unnamed Phase",
+      getPhaseName(page.properties) ?? "Unnamed Phase",
     phaseNumber: page.properties["Phase Number"]?.number ?? 0,
     phaseLength: page.properties["Phase Length"]?.number ?? 0,
     startDate:
       page.properties["Phase Start Date"]?.date?.start?.slice(0, 10) ?? null,
     phaseStatus: page.properties["Phase Status"]?.select?.name ?? null,
-    status: page.properties.Status?.select?.name ?? null,
   };
 }
 
@@ -886,15 +924,8 @@ function getFrozenPhaseXpSnapshot(
   const eventXp = phase.properties["Final Event XP"]?.number;
   const earnedXp = phase.properties["Final Phase XP"]?.number;
   const maxPhaseXp = phase.properties["Final Max Phase XP"]?.number;
-  const medalPace = phase.properties["Final Medal Pace"]?.select?.name;
   const medalEarned = phase.properties["Medal Earned"]?.select?.name;
   const version = phase.properties["XP Snapshot Version"]?.number;
-  const validPaces: CampaignMedalPace[] = [
-    "Gold Pace",
-    "Silver Pace",
-    "Bronze Pace",
-    "Unrated Pace",
-  ];
   const validMedals: CampaignMedal[] = [
     "Gold",
     "Silver",
@@ -913,7 +944,6 @@ function getFrozenPhaseXpSnapshot(
     earnedXp === undefined ||
     maxPhaseXp === null ||
     maxPhaseXp === undefined ||
-    !validPaces.includes(medalPace as CampaignMedalPace) ||
     !validMedals.includes(medalEarned as CampaignMedal) ||
     version !== 1
   ) {
@@ -928,7 +958,6 @@ function getFrozenPhaseXpSnapshot(
     eventXp,
     earnedXp,
     maxPhaseXp,
-    medalPace: medalPace as CampaignMedalPace,
     medalEarned: medalEarned as CampaignMedal,
     finalizedAt,
     version,
@@ -962,15 +991,20 @@ async function getRolloverPhaseXpState(
       phaseLength,
       maxDailyXp: phase.properties["Max Daily XP"]?.rollup?.number ?? null,
       maxWeeklyXp,
-      maxHabitXp:
-        phase.properties["Max Campaign XP"]?.formula?.number ?? null,
+      maxHabitXp: getMaxHabitXp(phase.properties),
       maxEventXp: phase.properties["Max Event XP"]?.number ?? null,
-      bronzeThresholdPercent:
-        phase.properties["Bronze Readiness %"]?.number ?? null,
-      silverThresholdPercent:
-        phase.properties["Silver Readiness %"]?.number ?? null,
-      goldThresholdPercent:
-        phase.properties["Gold Readiness %"]?.number ?? null,
+      bronzeThresholdPercent: getThresholdPercent(
+        phase.properties,
+        "Bronze"
+      ),
+      silverThresholdPercent: getThresholdPercent(
+        phase.properties,
+        "Silver"
+      ),
+      goldThresholdPercent: getThresholdPercent(
+        phase.properties,
+        "Gold"
+      ),
       events,
       operationalDate,
     }),
@@ -1012,17 +1046,12 @@ async function ensureFrozenPhaseXpSnapshot(
     );
   }
 
-  const medalPace =
-    state.phaseXp.earnedMedal === "None"
-      ? "Unrated Pace"
-      : (`${state.phaseXp.earnedMedal} Pace` as CampaignMedalPace);
   const snapshot: FrozenPhaseXpSnapshot = {
     dailyXp: state.phaseXp.dailyXp,
     weeklyXp: state.phaseXp.weeklyXp,
     eventXp: state.phaseXp.eventXp,
     earnedXp: state.phaseXp.earnedXp,
     maxPhaseXp: state.phaseXp.maxPhaseXp,
-    medalPace,
     medalEarned: state.phaseXp.earnedMedal,
     finalizedAt: operationalDate,
     version: 1,
@@ -1036,7 +1065,6 @@ async function ensureFrozenPhaseXpSnapshot(
       "Final Event XP": { number: snapshot.eventXp },
       "Final Phase XP": { number: snapshot.earnedXp },
       "Final Max Phase XP": { number: snapshot.maxPhaseXp },
-      "Final Medal Pace": { select: { name: snapshot.medalPace } },
       "Medal Earned": { select: { name: snapshot.medalEarned } },
       "Phase Finalized At": { date: { start: snapshot.finalizedAt } },
       "XP Snapshot Version": { number: snapshot.version },
@@ -1249,22 +1277,20 @@ async function executeCampaignRolloverInternal(
     snapshot
   );
 
-  if (source.phaseStatus !== "Complete" || source.status !== "Complete") {
+  if (source.phaseStatus !== "Complete") {
     await getNotionClient().pages.update({
       page_id: source.id,
       properties: {
         "Phase Status": { select: { name: "Complete" } },
-        Status: { select: { name: "Complete" } },
       },
     });
   }
 
-  if (target.phaseStatus !== "Active" || target.status !== "Active") {
+  if (target.phaseStatus !== "Active") {
     await getNotionClient().pages.update({
       page_id: target.id,
       properties: {
         "Phase Status": { select: { name: "Active" } },
-        Status: { select: { name: "Active" } },
       },
     });
   }

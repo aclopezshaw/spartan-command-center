@@ -63,7 +63,7 @@ The operation:
 2. calculates daily, weekly, and linked-event XP inside the outgoing phase date window;
 3. writes and verifies the immutable final XP total, maximum, projected pace, earned medal, timestamp, and snapshot version on the outgoing Campaign Operations row;
 4. finds or creates the exact `<Phase Name> Complete` Campaign history record related to the outgoing phase;
-5. writes both `Phase Status` and `Status` on the outgoing phase to Complete;
+5. writes `Phase Status` on the outgoing phase to Complete;
 6. writes both fields on the incoming phase to Active;
 7. re-reads the phase records and requires rollover state `complete`;
 8. reconciles and verifies the Service Record's versioned Individual completion state as `Eligible` (or preserves terminal `Assigned`);
@@ -75,10 +75,10 @@ An ineligible transition returns `409`. An unexpected write or verification erro
 
 Verify in Notion:
 
-- the outgoing Campaign Operations row has `Phase Status = Complete` and `Status = Complete`;
+- the outgoing Campaign Operations row has `Phase Status = Complete`;
 - its Final Daily, Weekly, Event, and Phase XP values reconcile, `Final Max Phase XP` is correct, and `Phase Finalized At` plus `XP Snapshot Version` are populated;
-- `Medal Earned` is based on final earned XP and `Final Medal Pace` is the corresponding pace label;
-- the incoming row has `Phase Status = Active` and `Status = Active`;
+- `Medal Earned` is based on final earned XP;
+- the incoming row has `Phase Status = Active`;
 - exactly one Service History row titled `<Phase Name> Complete` has `Entry Type = Campaign` and relates to the outgoing Campaign Operations row;
 - ALEX-225's Service Record has `Fireteam Eligibility Status = Eligible` (or `Assigned`), `Progression Stage`, `Eligibility Source Campaign`, `Eligibility Evaluated At`, `Eligibility Version`, `Eligibility Explanation`, and `Individual Completed At` populated consistently;
 - the normal active-phase resolver now returns the incoming phase.

@@ -12,7 +12,6 @@ const phaseOne = {
   phaseLength: 42,
   startDate: "2026-06-21",
   phaseStatus: "Active",
-  status: "Active",
 };
 
 const phaseTwo = {
@@ -24,7 +23,6 @@ const phaseTwo = {
   phaseLength: 42,
   startDate: "2026-08-02",
   phaseStatus: "Upcoming",
-  status: null,
 };
 
 const completedEvents = [
@@ -114,7 +112,7 @@ test("reports history-only partial application as recovery", () => {
 test("recovers when the outgoing phase was completed before activation", () => {
   const result = evaluate({
     phases: [
-      { ...phaseOne, phaseStatus: "Complete", status: "Complete" },
+      { ...phaseOne, phaseStatus: "Complete" },
       phaseTwo,
     ],
     historyExists: true,
@@ -128,7 +126,7 @@ test("recovers when the incoming phase was activated first", () => {
   const result = evaluate({
     phases: [
       phaseOne,
-      { ...phaseTwo, phaseStatus: "Active", status: "Active" },
+      { ...phaseTwo, phaseStatus: "Active" },
     ],
     historyExists: true,
   });
@@ -140,8 +138,8 @@ test("recovers when the incoming phase was activated first", () => {
 test("recognizes a fully verified rollover", () => {
   const result = evaluate({
     phases: [
-      { ...phaseOne, phaseStatus: "Complete", status: "Complete" },
-      { ...phaseTwo, phaseStatus: "Active", status: "Active" },
+      { ...phaseOne, phaseStatus: "Complete" },
+      { ...phaseTwo, phaseStatus: "Active" },
     ],
     historyExists: true,
   });
@@ -153,8 +151,8 @@ test("recognizes a fully verified rollover", () => {
 test("switches the Day 1 HUD to the incoming Phase II daypart suite", () => {
   const result = evaluate({
     phases: [
-      { ...phaseOne, phaseStatus: "Complete", status: "Complete" },
-      { ...phaseTwo, phaseStatus: "Active", status: "Active" },
+      { ...phaseOne, phaseStatus: "Complete" },
+      { ...phaseTwo, phaseStatus: "Active" },
     ],
     historyExists: true,
   });
@@ -177,19 +175,6 @@ test("switches the Day 1 HUD to the incoming Phase II daypart suite", () => {
     getHudBackground(activePhaseName, 22),
     "/images/hud/phase-ii-fireteam-room-night.png"
   );
-});
-
-test("keeps a secondary status mismatch in recovery", () => {
-  const result = evaluate({
-    phases: [
-      { ...phaseOne, phaseStatus: "Complete", status: "Active" },
-      { ...phaseTwo, phaseStatus: "Active", status: "Active" },
-    ],
-    historyExists: true,
-  });
-
-  assert.equal(result.eligible, true);
-  assert.equal(result.state, "recovery");
 });
 
 test("blocks an outgoing phase with no authoritative events", () => {

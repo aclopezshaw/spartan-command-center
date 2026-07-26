@@ -194,6 +194,10 @@ The current static cookie implementation and unguarded Route Handlers are tracke
 | Mobile intel reports | Not persisted |
 | Static campaign, promotion, Armory, recommendations, and several SMU values | Repository constants or placeholder JSX |
 
+The canonical Campaign Operations and Service Record properties, including the
+single `Phase Status` lifecycle field and `Service Score` lifetime-XP contract,
+are documented in [`NOTION_SCHEMA_CONTRACTS.md`](NOTION_SCHEMA_CONTRACTS.md).
+
 ## Deployment assumptions
 
 The repository contains no deployment configuration beyond standard Next.js defaults and ignored `.vercel` state. `next.config.ts` has no custom options. Deployment on Vercel is implied by repository history and environment terminology, but operational deployment procedures are not yet documented in Phase 1.

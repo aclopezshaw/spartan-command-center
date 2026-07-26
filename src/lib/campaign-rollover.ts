@@ -9,7 +9,6 @@ export type RolloverPhase = {
   phaseLength: number;
   startDate: string | null;
   phaseStatus: RolloverPhaseStatus | null;
-  status: string | null;
 };
 
 export type RolloverEvent = {
@@ -49,11 +48,8 @@ function getTransitionState(
 ): Pick<RolloverEvaluation, "state" | "eligible" | "reasons"> {
   const sourcePhaseComplete = source.phaseStatus === "Complete";
   const targetPhaseActive = target.phaseStatus === "Active";
-  const sourceFullyComplete =
-    sourcePhaseComplete && source.status === "Complete";
-  const targetFullyActive = targetPhaseActive && target.status === "Active";
 
-  if (sourceFullyComplete && targetFullyActive && historyExists) {
+  if (sourcePhaseComplete && targetPhaseActive && historyExists) {
     return { state: "complete", eligible: true, reasons: [] };
   }
 
@@ -63,9 +59,7 @@ function getTransitionState(
   ) {
     const partiallyApplied =
       sourcePhaseComplete ||
-      source.status === "Complete" ||
       targetPhaseActive ||
-      target.status === "Active" ||
       historyExists;
     return {
       state: partiallyApplied ? "recovery" : "ready",

@@ -344,9 +344,7 @@ const properties = (freshRecord as any).properties;
         (activeCampaignEventState.maxEventXp ?? 0);
     const maxPhaseXp =
         phaseXpSummary?.maxPhaseXp ??
-        (phaseOwnedMaxXp > 0
-            ? phaseOwnedMaxXp
-            : getNumberProperty(properties, "Max XP (w/ Events)"));
+        phaseOwnedMaxXp;
     const bronzeThresholdXp = phaseXpSummary
         ? phaseXpSummary.thresholds.bronze
         : activeCampaignEventState.bronzeThresholdPercent
@@ -354,7 +352,7 @@ const properties = (freshRecord as any).properties;
               maxPhaseXp *
                   (activeCampaignEventState.bronzeThresholdPercent / 100)
           )
-        : getNumberProperty(properties, "Bronze Threshold XP");
+        : 0;
     const silverThresholdXp = phaseXpSummary
         ? phaseXpSummary.thresholds.silver
         : activeCampaignEventState.silverThresholdPercent
@@ -362,7 +360,7 @@ const properties = (freshRecord as any).properties;
               maxPhaseXp *
                   (activeCampaignEventState.silverThresholdPercent / 100)
           )
-        : getNumberProperty(properties, "Silver Threshold XP");
+        : 0;
     const goldThresholdXp = phaseXpSummary
         ? phaseXpSummary.thresholds.gold
         : activeCampaignEventState.goldThresholdPercent
@@ -370,12 +368,12 @@ const properties = (freshRecord as any).properties;
               maxPhaseXp *
                   (activeCampaignEventState.goldThresholdPercent / 100)
           )
-        : getNumberProperty(properties, "Gold Threshold XP");
+        : 0;
     const campaignProgress =
         maxPhaseXp > 0 ? Math.round((campaignXp / maxPhaseXp) * 100) : 0;
     const projectedCampaignXp =
         phaseXpSummary?.projectedXp ??
-        getNumberProperty(properties, "Projected Campaign XP");
+        campaignXp;
     const campaignMedalPace =
         phaseXpSummary?.projectedMedalPace ??
         (phaseOwnedMaxXp > 0
@@ -385,8 +383,7 @@ const properties = (freshRecord as any).properties;
                   silverThresholdXp,
                   goldThresholdXp
               )
-            : getTextProperty(properties, "Campaign Medal Pace") ||
-              "Unrated Pace");
+            : "Unrated Pace");
     const campaignMedalPaceLabel =
         campaignMedalPace.replace(/^[^A-Za-z0-9]+/, "").trim() ||
         "Unrated Pace";
