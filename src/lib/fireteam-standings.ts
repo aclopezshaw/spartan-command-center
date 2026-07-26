@@ -37,6 +37,11 @@ export type FireteamCumulativeStanding = {
   rank: number;
 };
 
+export type FireteamStandingWithMovement = FireteamCumulativeStanding & {
+  previousRank: number;
+  movement: number;
+};
+
 export type FireteamStandingsResolution = {
   version: typeof FIRETEAM_STANDINGS_VERSION;
   eventId: string;
@@ -283,6 +288,31 @@ export function calculateCumulativeStandings(
       ...standing,
       rank: index + 1,
     }));
+}
+
+export function addStandingsMovement(
+  standings: FireteamCumulativeStanding[],
+  previousStandings: FireteamCumulativeStanding[] = calculateCumulativeStandings(
+    []
+  )
+): FireteamStandingWithMovement[] {
+  const previousRankByFireteam = new Map(
+    previousStandings.map((standing) => [
+      standing.fireteamId,
+      standing.rank,
+    ])
+  );
+
+  return standings.map((standing) => {
+    const previousRank =
+      previousRankByFireteam.get(standing.fireteamId) ?? standing.rank;
+
+    return {
+      ...standing,
+      previousRank,
+      movement: previousRank - standing.rank,
+    };
+  });
 }
 
 export function isPhaseTwoCompetitiveEvent(eventId: string) {

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  addStandingsMovement,
   calculateCumulativeStandings,
   calculateEpsilonStandingsPoints,
   resolveFireteamEventScores,
@@ -150,5 +151,30 @@ test("breaks cumulative ties by wins then final major placement", () => {
         rank: 5,
       },
     ]
+  );
+});
+
+test("reports rank movement from the previous persisted board", () => {
+  const previous = calculateCumulativeStandings([]);
+  const current = [
+    { ...previous[2], rank: 1, points: 4 },
+    { ...previous[0], rank: 2, points: 3 },
+    { ...previous[1], rank: 3, points: 2 },
+    previous[3],
+    previous[4],
+  ];
+  const movement = addStandingsMovement(current, previous);
+
+  assert.equal(
+    movement.find((standing) => standing.fireteamId === "epsilon").movement,
+    2
+  );
+  assert.equal(
+    movement.find((standing) => standing.fireteamId === "alpha").movement,
+    -1
+  );
+  assert.equal(
+    movement.find((standing) => standing.fireteamId === "sigma").movement,
+    0
   );
 });

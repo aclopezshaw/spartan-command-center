@@ -60,6 +60,7 @@ import {
   type UnitCohesionSourceType,
 } from "@/lib/unit-cohesion";
 import {
+  addStandingsMovement,
   calculateCumulativeStandings,
   FIRETEAM_STANDINGS_TITLE_PREFIX,
   FIRETEAM_STANDINGS_VERSION,
@@ -1870,7 +1871,7 @@ export async function getFireteamStandingsStatus() {
       campaignName: eventState.campaignName,
       phaseName: eventState.phaseName,
       resolvedEventCount: 0,
-      standings: calculateCumulativeStandings([]),
+      standings: addStandingsMovement(calculateCumulativeStandings([])),
       eventResults: [],
       duplicateEventPageIds: [],
     };
@@ -1910,18 +1911,31 @@ export async function getFireteamStandingsStatus() {
     seenEventPageIds.add(resolution.eventPageId);
     uniqueResolutions.push(resolution);
   }
+  const standings = calculateCumulativeStandings(uniqueResolutions);
+  const previousStandings =
+    uniqueResolutions.length > 1
+      ? uniqueResolutions[uniqueResolutions.length - 2].cumulativeStandings
+      : calculateCumulativeStandings([]);
 
   return {
     campaignName: eventState.campaignName,
     phaseName: eventState.phaseName,
     resolvedEventCount: uniqueResolutions.length,
-    standings: calculateCumulativeStandings(uniqueResolutions),
+    standings: addStandingsMovement(standings, previousStandings),
     eventResults: uniqueResolutions.map(
-      ({ eventId, eventDay, eventType, scores, resolvedAt }) => ({
+      ({
         eventId,
         eventDay,
         eventType,
         scores,
+        cumulativeStandings,
+        resolvedAt,
+      }) => ({
+        eventId,
+        eventDay,
+        eventType,
+        scores,
+        cumulativeStandings,
         resolvedAt,
       })
     ),
