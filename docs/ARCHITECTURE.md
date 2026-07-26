@@ -1,7 +1,7 @@
 # Architecture
 
 **Document status:** Living description of current architecture  
-**Last verified:** 2026-07-16
+**Last verified:** 2026-07-25
 
 ## Overview
 
@@ -34,7 +34,7 @@ The diagram describes current connections, not desired security or persistence b
 
 - `src/app/page.tsx` exposes the public login page through `LoginPage`.
 - `src/app/(protected)/layout.tsx` wraps eight protected page routes through `ProtectedLayout`.
-- `src/app/api/**/route.ts` exposes 21 HTTP endpoints.
+- `src/app/api/**/route.ts` exposes 26 Route Handler files.
 - `src/app/components` contains shared presentation and interactive components.
 - `src/lib` contains shared Notion, achievement, event, and date logic.
 - `src/data/events.ts` is the repository-owned event catalog.
@@ -77,14 +77,15 @@ Schema mapping, pagination, authorization, and error translation are still distr
 2. `HudCheckbox.toggle` sends `propertyName` and `checked` to `/api/sitrep-checkbox`.
 3. The Route Handler calls `updateDailySitrepCheckbox`.
 4. Checked objectives trigger `evaluateAchievements`.
-5. The client calls `router.refresh()` without verifying `response.ok`.
+5. After the source checkbox persists, `updateDailySitrepCheckbox` reconciles the source-derived Unit Cohesion operation when permanent Fireteam assignment is complete and the record is assignment-date eligible.
+6. The client calls `router.refresh()` without verifying `response.ok`.
 
 ### Hydration update
 
 1. `TrainingReportsPage.submitHydration` posts an amount to `/api/hydration-log`.
 2. The Route Handler creates a Notion Hydration Log page.
 3. It aggregates the current America/Denver operational day through `getHydrationTotalForOperationalDay`, using DST-safe UTC query boundaries from `src/lib/date.ts`.
-4. At 96 ounces, it updates the current Denver-dated SITREP Water checkbox.
+4. At 96 ounces, it updates the current Denver-dated SITREP Water checkbox through the shared mutation helper, including eligible Unit Cohesion reconciliation.
 5. The page reloads `/api/hydration-total`.
 
 Daily record selection and hydration aggregation now share the America/Denver operational calendar accepted in [ADR-0003](adr/0003-denver-operational-time.md).
@@ -100,9 +101,56 @@ Daily record selection and hydration aggregation now share the America/Denver op
 
 1. `getActiveCampaignEventState` loads Event records from Notion, resolves their related Campaign Operations phase records, and returns the active campaign name, phase name, next phase name, phase length, schedule, and authoritative campaign day. Event records without a legacy `Event ID` use their stable Notion page ID for application identity, while completion is derived directly from the resolved record and linked history.
 2. `EventSystem` loads that server-derived state from `/api/events/status`, derives the current or next phase event, and keeps local state only after a successful completion response.
-3. `/api/complete-event` accepts only an event identifier; it rejects events outside the active phase, events before their scheduled campaign day, and later events while an earlier one is unresolved.
-4. The Route Handler evaluates authoritative readiness, writes `Failed` only for an unsuccessful review, and on success creates the linked Service History entry before writing the Event record as `Defeated` with a Denver date key.
-5. Legacy catalog entries remain presentation fallbacks for event copy and artwork while scheduling, readiness requirements, phase scope, and completion state come from Notion.
+3. Authenticated `/api/complete-event` accepts only an event identifier; it rejects events outside the active phase, events before their scheduled campaign day, and later events while an earlier one is unresolved. The exact Notion page ID resolved from the active phase is retrieved before any legacy Event ID lookup, preventing a stale same-ID row from replacing the active record.
+4. The Route Handler evaluates authoritative readiness and writes `Failed` only for an unsuccessful review.
+5. On Phase II success, the server snapshots readiness and persists one deterministic Fireteam Standings resolution before reconciling exactly one XP-bearing Event Service History record and finally writing the Event record as `Defeated` with a Denver date key.
+6. Standings preserve Epsilon's readiness-earned score, assign the four remaining unique values through seeded weighted rival ordering, persist cumulative totals and wins, and rank cumulative ties by wins then final-major placement. The seed and arithmetic remain server-side.
+7. Event and standings writes use exact-record recovery and in-process concurrency coalescing. Retries return or repair the persisted resolution; duplicate records surface as conflicts instead of rerolling.
+8. Legacy catalog entries remain presentation fallbacks for event copy and artwork while scheduling, readiness requirements, phase scope, and completion state come from Notion.
+
+### Campaign phase rollover
+
+1. Authenticated `GET /api/campaign/rollover` discovers Campaign Operations through authoritative Event relations and selects only the immediate, same-campaign next phase whose Denver start date is due.
+2. `evaluateRollover` in `src/lib/campaign-rollover.ts` blocks an outgoing phase with no events or any event lacking `Defeated`, a completion date, or linked Service History.
+3. Authenticated `POST /api/campaign/rollover` is the explicit mutation boundary. HUD and page reads do not cause rollover writes.
+4. Before changing phase status, the operation calculates exact phase-scoped Daily SITREP, Weekly Operations, and linked Service History event XP. It expands the phase's per-day and per-week objective pools across its length, calculates thresholds from maximum habit XP plus mandatory event XP, and writes a versioned immutable result to the outgoing Campaign Operations row.
+5. A missing or duplicate linked event-history record blocks the snapshot. Once `Phase Finalized At` exists, retries read and verify the existing snapshot rather than recalculating or overwriting it.
+6. The operation then reconciles an exact phase-completion Campaign history record, writes the outgoing phase Complete, writes the incoming phase Active, and re-reads the authoritative records.
+7. After rollover verifies, it persists and verifies the Service Record's Individual completion eligibility. Retries resume snapshot-only, history-only, source-only, target-only, or eligibility-only partial states.
+8. A module-level promise coalesces concurrent requests in one server process; cross-process exclusivity remains constrained by Notion's lack of transactions and unique constraints.
+
+Operational inspection and recovery are documented in [`CAMPAIGN_ROLLOVER_RUNBOOK.md`](CAMPAIGN_ROLLOVER_RUNBOOK.md).
+
+### Individual completion eligibility
+
+1. Authenticated `GET /api/progression/individual-completion` evaluates Campaign 1 Phase 1 against the current America/Denver operational date without mutation.
+2. `evaluateIndividualCompletion` in `src/lib/individual-completion.ts` requires the phase completion boundary, at least one authoritative event, durable completion of every event, and exactly one XP-bearing Service History record per event.
+3. Passing those checks without a frozen XP snapshot produces `ready_to_finalize`. This makes the ceremony available without silently freezing XP during a read.
+4. A verified frozen snapshot produces `eligible`; only that state can be consumed by the later canonical Fireteam assignment workflow. A persisted `Eligible` label cannot substitute for missing evidence.
+5. Authenticated `POST /api/progression/individual-completion` explicitly reconciles the versioned status, evidence explanation, evaluation date, source Campaign relation, and completion date on ALEX-225's Service Record.
+6. `Assigned` or a `Fireteam Member` progression stage is terminal. The evaluator reports the completed transition but does not create or choose the Fireteam assignment; that remains a separate Phase II workflow.
+
+### Ceremonial events and the Assembly Hall
+
+1. `getCeremonialEvent` in `src/lib/ceremonial-events.ts` translates authoritative progression and assignment states into a presentation-only Personnel Command order. The Fireteam Assignment order appears at `ready_to_finalize` or `eligible`, remains visible through an interrupted or partially finalized assignment, and is dismissed only after completion verifies.
+2. A Ceremonial Event is not a Campaign Event. Its contract explicitly carries zero XP, readiness, and standings rewards and routes to `/assembly-hall`; later promotion, medal, command-assignment, specialization, and graduation eligibility may use the same order shape.
+3. `CommandHudPage` evaluates Individual completion on the server and passes any resulting order to `EventSystem`. A due Campaign Event retains priority; otherwise the ceremonial order occupies the same right-side event presentation slot and links directly to the hall.
+4. `/assembly-hall` is a dynamic Server Component that renders the permanent location from live eligibility and assignment evidence. `FireteamAssignmentCeremony` begins the ceremony, advances four monotonic persisted presentation steps, accepts the assignment, presents recovery when finalization is incomplete, and offers a read-only replay after completion.
+5. Beginning the ceremony is an explicit mutation. It freezes and verifies the Phase I XP/medal snapshot when eligibility is `ready_to_finalize`, reconciles eligibility to `eligible`, and then writes `In Progress`; ordinary reads never freeze XP.
+6. The authenticated `/api/progression/fireteam-assignment` Route Handler accepts only `begin`, `progress`, or `complete`. The server owns Fireteam Epsilon's ID, name, motto, five stable member IDs, assignment version, operation ID, roster snapshot, and initial `Acquaintance I` teammate baselines; the client cannot submit or reroll identity.
+7. Completion first writes the canonical assignment to ALEX-225's Service Record with status `Finalizing` and progression stage `Fireteam Member`, then finds or creates the exact zero-reward `Assignment` Service History record, requires exactly one matching record, and finally marks the assignment `Complete`. A retry resumes from the persisted step or reconciles the canonical finalizing snapshot rather than creating a second identity.
+8. `/fireteam` is always routable but keeps identity and dossiers restricted until assignment state is `completed`. The completed surface reads the same canonical contract used by the ceremony.
+9. `/promotion-board` permanently redirects to the canonical Assembly Hall route, and primary navigation uses the new name.
+
+### Unit Cohesion relationship progression
+
+1. `src/lib/unit-cohesion.ts` owns the approved Daily SITREP and Weekly Operations affinity map, stable operation-ID contract, sixteen-level 25/50/75/100 curve, source-date eligibility rule, and deterministic ledger aggregation.
+2. Qualifying source mutations persist the source checkbox first, then reconcile one `System` Service History row whose title is derived from source type, source record ID, and property. The JSON description records the source, member, readiness category, active/reversed state, and update time; XP remains zero.
+3. Permanent Fireteam assignment is the eligibility boundary. Pre-assignment source dates do not create ledger rows, and a false checkbox with no prior row is a no-op.
+4. Repeated writes with the same state are idempotent. Unchecking updates the exact row to inactive; rechecking restores it to active rather than creating a new point.
+5. `getUnitCohesionStatus` derives each teammate's current total and current-level progress from active ledger rows. Duplicate source operations are surfaced as reconciliation conflicts instead of silently double-counted.
+6. `/fireteam` reads the derived state only after canonical assignment completion. Unit Cohesion `System` rows are excluded from the player-facing Service History timeline.
+7. In-process promises coalesce simultaneous writes to one operation. Cross-process uniqueness remains constrained by Notion; exact-record queries and duplicate detection provide recovery evidence rather than transactional guarantees.
 
 ### Academic assignment flow
 
@@ -115,7 +163,7 @@ Daily record selection and hydration aggregation now share the America/Denver op
 
 ## Security boundary
 
-Every Route Handler is a public HTTP entry point and must verify authorization independently. The workout logging, phase-metric, Focus Queue mutation, and academic-quarter handlers use `hasAuthorizedSession`; many older handlers remain unguarded. The current `ProtectedLayout` protects page rendering only. `proxy.disabled.ts` is disabled by filename and would still not replace authorization checks if enabled.
+Every Route Handler is a public HTTP entry point and must verify authorization independently. The campaign rollover, Individual completion eligibility, Fireteam Assignment, Daily SITREP, Weekly Operations, workout logging, phase-metric, Focus Queue mutation, and academic-quarter handlers use `hasAuthorizedSession`; many older handlers remain unguarded. The current `ProtectedLayout` protects page rendering only. `proxy.disabled.ts` is disabled by filename and would still not replace authorization checks if enabled.
 
 The current static cookie implementation and unguarded Route Handlers are tracked by [SDCB #192](https://app.notion.com/p/39cbc7d80f45818293afd11fc4c17bae).
 
@@ -125,6 +173,11 @@ The current static cookie implementation and unguarded Route Handlers are tracke
 | --- | --- |
 | SITREP, weekly operations, hydration, assignments, achievements, books, reading reports, service history | Notion |
 | Event completion state | Notion Events and linked Service History records |
+| Fireteam Standings | One zero-XP `System` Service History resolution per competitive event stores the readiness snapshot, deterministic seed/version, five unique scores and placements, cumulative totals, wins, and final-major tie-break evidence; it deliberately has no Related Event relation so XP/history uniqueness remains separate |
+| Campaign phase rollover | Versioned final XP/medal snapshot and phase states on Notion Campaign Operations, plus one linked Service History Campaign record |
+| Individual completion eligibility | Versioned eligibility status, source phase, evidence explanation, evaluation date, and completion date on ALEX-225's Notion Service Record |
+| Fireteam assignment | Versioned canonical identity, operation ID, ceremony step, assignment date, roster/relationship baseline snapshot, and completion state on ALEX-225's Notion Service Record, plus one matching zero-reward Assignment Service History record |
+| Unit Cohesion | Source-derived, zero-XP `System` rows in Notion Service History store active/reversed habit contributions; current per-member level and progress are reproducibly derived from those auditable rows |
 | Mobile hydration | Server-process memory |
 | Mobile intel reports | Not persisted |
 | Static campaign, promotion, Armory, recommendations, and several SMU values | Repository constants or placeholder JSX |

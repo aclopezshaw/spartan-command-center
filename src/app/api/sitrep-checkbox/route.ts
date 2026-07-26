@@ -4,14 +4,24 @@ import {
   updateDailySitrepCheckbox,
 } from "@/lib/notion";
 import { evaluateAchievements } from "@/lib/achievements";
+import { hasAuthorizedSession } from "@/lib/auth";
+import { getUnitCohesionHabit } from "@/lib/unit-cohesion";
 
 export async function POST(request: Request) {
+  if (!(await hasAuthorizedSession())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await request.json();
   const { propertyName, checked } = body;
 
-  if (!propertyName || typeof checked !== "boolean") {
+  if (
+    !propertyName ||
+    typeof checked !== "boolean" ||
+    !getUnitCohesionHabit("daily", propertyName)
+  ) {
     return NextResponse.json(
-      { error: "Missing propertyName or checked" },
+      { error: "Invalid Daily SITREP property or checked value" },
       { status: 400 }
     );
   }

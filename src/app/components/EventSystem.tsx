@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { type ReactNode, useEffect, useState } from "react";
 import { areAllCampaignEventsComplete, getActiveEvent, getNextEvent } from "@/lib/events";
 import { getEventReadinessCopy } from "@/lib/event-readiness";
 import { getCampaignPhaseDisplayName } from "@/lib/campaign";
 import { CampaignEvent } from "@/data/events";
+import type { CeremonialEvent } from "@/lib/ceremonial-events";
 import HudPanel from "../components/HudPanel";
 import { NextEventPanel } from "../components/NextEventPanel";
 
@@ -14,7 +16,13 @@ type CompletionResponse = {
   unmetRequirements?: string[];
 };
 
-export function EventSystem({ children }: { children: ReactNode }) {
+export function EventSystem({
+  children,
+  ceremonialEvent = null,
+}: {
+  children: ReactNode;
+  ceremonialEvent?: CeremonialEvent | null;
+}) {
   const [completedEventIds, setCompletedEventIds] = useState<string[]>([]);
   const [events, setEvents] = useState<CampaignEvent[]>([]);
   const [campaignDay, setCampaignDay] = useState<number | null>(null);
@@ -125,6 +133,37 @@ export function EventSystem({ children }: { children: ReactNode }) {
           setReviewingEventId(activeEvent.id);
         }}
       />
+    );
+  } else if (ceremonialEvent) {
+    eventPanel = (
+      <HudPanel
+        title="Campaign Event"
+        titleClassName="text-amber-300 tracking-[0.3em]"
+        className="border-amber-400/50 bg-black/35 shadow-[0_0_22px_rgba(251,191,36,0.16)]"
+      >
+        <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-amber-300">
+          {ceremonialEvent.orderLabel}
+        </p>
+        <p className="mt-3 text-sm font-black uppercase leading-tight text-white">
+          {ceremonialEvent.title}
+        </p>
+        <p className="mt-2 text-xs leading-5 text-slate-300">
+          Report to {ceremonialEvent.destination}.
+        </p>
+
+        <div className="mt-3 flex items-center justify-between border-y border-amber-500/20 py-2 text-[9px] uppercase tracking-[0.14em] text-slate-500">
+          <span>XP 0</span>
+          <span>Readiness 0</span>
+          <span>History on Completion</span>
+        </div>
+
+        <Link
+          href={ceremonialEvent.href}
+          className="mt-3 block border border-amber-300/70 bg-amber-300/10 px-3 py-2 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-amber-200 transition hover:bg-amber-300/20"
+        >
+          Report to Assembly Hall
+        </Link>
+      </HudPanel>
     );
   } else if (nextEvent) {
     eventPanel = (

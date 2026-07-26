@@ -1,13 +1,20 @@
 import { CampaignEvent, eventCatalog, SpartanEvent, EventStatus } from "@/data/events";
+import {
+  getFirstActiveScheduledEvent,
+  getNextScheduledEvent,
+  getScheduledEventStatus,
+} from "@/lib/event-schedule";
 
 export function getEventStatus(
   event: SpartanEvent,
   campaignDay: number,
   completedEventIds: string[] = []
 ): EventStatus {
-  if (completedEventIds.includes(event.id)) return "completed";
-  if (campaignDay < event.unlockDay) return "upcoming";
-  return "active";
+  return getScheduledEventStatus(
+    event,
+    campaignDay,
+    completedEventIds
+  );
 }
 
 export function getActiveEvent(
@@ -15,12 +22,11 @@ export function getActiveEvent(
   completedEventIds: string[] = [],
   events: SpartanEvent[] = eventCatalog
 ) {
-  return events
-    .slice()
-    .sort((a, b) => a.unlockDay - b.unlockDay)
-    .find(
-    (event) => getEventStatus(event, campaignDay, completedEventIds) === "active"
-    );
+  return getFirstActiveScheduledEvent(
+    events,
+    campaignDay,
+    completedEventIds
+  );
 }
 
 export function getNextEvent(
@@ -28,10 +34,11 @@ export function getNextEvent(
   completedEventIds: string[] = [],
   events: SpartanEvent[] = eventCatalog
 ) {
-  return events
-    .filter((event) => !completedEventIds.includes(event.id))
-    .filter((event) => event.unlockDay > campaignDay)
-    .sort((a, b) => a.unlockDay - b.unlockDay)[0];
+  return getNextScheduledEvent(
+    events,
+    campaignDay,
+    completedEventIds
+  );
 }
 
 export function areAllCampaignEventsComplete(

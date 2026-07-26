@@ -1,6 +1,7 @@
 import {
     getActiveCampaignEventState,
     getAlexServiceRecord,
+    getCampaignPhaseXpSummary,
 } from "@/lib/notion";
 import { getCampaignPhaseDisplayName } from "@/lib/campaign";
 import { getNotionClient } from "@/lib/notion-client";
@@ -147,14 +148,16 @@ function getMedalPaceTheme(medalPace: string) {
     };
 }
 
-function getHigherPaceMarkers({
-    currentPace,
+function getPendingPaceMarkers({
+    earnedXp,
     maxPhaseXp,
+    bronzeThresholdXp,
     silverThresholdXp,
     goldThresholdXp,
 }: {
-    currentPace: string;
+    earnedXp: number;
     maxPhaseXp: number;
+    bronzeThresholdXp: number;
     silverThresholdXp: number;
     goldThresholdXp: number;
 }): ProgressMarker[] {
@@ -162,36 +165,36 @@ function getHigherPaceMarkers({
         return [];
     }
 
-    const normalizedPace = currentPace.toLowerCase();
-    const markers: ProgressMarker[] = [];
-
-    if (normalizedPace.includes("bronze") && silverThresholdXp > 0) {
-        markers.push({
-            label: "Silver Pace",
+    const thresholds = [
+        {
+            label: "Bronze",
+            xp: bronzeThresholdXp,
+            lineClassName:
+                "bg-[#c5a078] shadow-[0_0_6px_rgba(197,160,120,0.85)]",
+            textClassName: "text-[#c5a078]",
+        },
+        {
+            label: "Silver",
             xp: silverThresholdXp,
-            value: (silverThresholdXp / maxPhaseXp) * 100,
             lineClassName:
                 "bg-[#aab4bd] shadow-[0_0_6px_rgba(170,180,189,0.9)]",
             textClassName: "text-[#aab4bd]",
-        });
-    }
-
-    if (
-        (normalizedPace.includes("bronze") ||
-            normalizedPace.includes("silver")) &&
-        goldThresholdXp > 0
-    ) {
-        markers.push({
-            label: "Gold Pace",
+        },
+        {
+            label: "Gold",
             xp: goldThresholdXp,
-            value: (goldThresholdXp / maxPhaseXp) * 100,
             lineClassName:
                 "bg-amber-300 shadow-[0_0_6px_rgba(252,211,77,0.95)]",
             textClassName: "text-amber-300",
-        });
-    }
+        },
+    ];
 
-    return markers;
+    return thresholds
+        .filter(({ xp }) => xp > 0 && earnedXp <= xp)
+        .map((threshold) => ({
+            ...threshold,
+            value: (threshold.xp / maxPhaseXp) * 100,
+        }));
 }
 
 function StatCard({ label, value }: { label: string; value: number | string }) {
@@ -311,6 +314,9 @@ export default async function Home() {
   page_id: (record as any).id,
 });
     const activeCampaignEventState = await getActiveCampaignEventState();
+    const phaseXpSummary = await getCampaignPhaseXpSummary(
+        activeCampaignEventState
+    );
 
 const properties = (freshRecord as any).properties;
 
@@ -332,27 +338,34 @@ const properties = (freshRecord as any).properties;
 
     const xpProgress = Math.round((spartan.xp / spartan.nextRankXp) * 100);
     const xpToNextRank = spartan.nextRankXp - spartan.xp;
-    const campaignXp = spartan.xp;
+    const campaignXp = phaseXpSummary?.earnedXp ?? spartan.xp;
     const phaseOwnedMaxXp =
         (activeCampaignEventState.maxHabitXp ?? 0) +
         (activeCampaignEventState.maxEventXp ?? 0);
     const maxPhaseXp =
-        phaseOwnedMaxXp > 0
+        phaseXpSummary?.maxPhaseXp ??
+        (phaseOwnedMaxXp > 0
             ? phaseOwnedMaxXp
-            : getNumberProperty(properties, "Max XP (w/ Events)");
-    const bronzeThresholdXp = activeCampaignEventState.bronzeThresholdPercent
+            : getNumberProperty(properties, "Max XP (w/ Events)"));
+    const bronzeThresholdXp = phaseXpSummary
+        ? phaseXpSummary.thresholds.bronze
+        : activeCampaignEventState.bronzeThresholdPercent
         ? Math.round(
               maxPhaseXp *
                   (activeCampaignEventState.bronzeThresholdPercent / 100)
           )
         : getNumberProperty(properties, "Bronze Threshold XP");
-    const silverThresholdXp = activeCampaignEventState.silverThresholdPercent
+    const silverThresholdXp = phaseXpSummary
+        ? phaseXpSummary.thresholds.silver
+        : activeCampaignEventState.silverThresholdPercent
         ? Math.round(
               maxPhaseXp *
                   (activeCampaignEventState.silverThresholdPercent / 100)
           )
         : getNumberProperty(properties, "Silver Threshold XP");
-    const goldThresholdXp = activeCampaignEventState.goldThresholdPercent
+    const goldThresholdXp = phaseXpSummary
+        ? phaseXpSummary.thresholds.gold
+        : activeCampaignEventState.goldThresholdPercent
         ? Math.round(
               maxPhaseXp *
                   (activeCampaignEventState.goldThresholdPercent / 100)
@@ -360,12 +373,12 @@ const properties = (freshRecord as any).properties;
         : getNumberProperty(properties, "Gold Threshold XP");
     const campaignProgress =
         maxPhaseXp > 0 ? Math.round((campaignXp / maxPhaseXp) * 100) : 0;
-    const projectedCampaignXp = getNumberProperty(
-        properties,
-        "Projected Campaign XP"
-    );
+    const projectedCampaignXp =
+        phaseXpSummary?.projectedXp ??
+        getNumberProperty(properties, "Projected Campaign XP");
     const campaignMedalPace =
-        phaseOwnedMaxXp > 0
+        phaseXpSummary?.projectedMedalPace ??
+        (phaseOwnedMaxXp > 0
             ? getCampaignMedalPace(
                   projectedCampaignXp,
                   bronzeThresholdXp,
@@ -373,14 +386,19 @@ const properties = (freshRecord as any).properties;
                   goldThresholdXp
               )
             : getTextProperty(properties, "Campaign Medal Pace") ||
-              "Unrated Pace";
+              "Unrated Pace");
     const campaignMedalPaceLabel =
         campaignMedalPace.replace(/^[^A-Za-z0-9]+/, "").trim() ||
         "Unrated Pace";
+    const campaignMedalPaceDisplay = campaignMedalPaceLabel.replace(
+        /\s+Pace$/i,
+        ""
+    );
     const medalPaceTheme = getMedalPaceTheme(campaignMedalPaceLabel);
-    const higherPaceMarkers = getHigherPaceMarkers({
-        currentPace: campaignMedalPaceLabel,
+    const pendingPaceMarkers = getPendingPaceMarkers({
+        earnedXp: campaignXp,
         maxPhaseXp,
+        bronzeThresholdXp,
         silverThresholdXp,
         goldThresholdXp,
     });
@@ -489,7 +507,7 @@ spartan.readiness = readinessTotals;
                                     <span>
                                         Projected Medal Pace ·{" "}
                                         <span className={medalPaceTheme.textClassName}>
-                                            {campaignMedalPaceLabel}
+                                            {campaignMedalPaceDisplay}
                                         </span>
                                     </span>
                                     <span>
@@ -500,12 +518,19 @@ spartan.readiness = readinessTotals;
                                     <ProgressBar
                                         value={campaignProgress}
                                         barClassName={medalPaceTheme.barClassName}
-                                        markers={higherPaceMarkers}
+                                        markers={pendingPaceMarkers}
                                     />
                                 </div>
                                 <p className="mt-3 text-xs text-slate-500">
                                     Maximum phase XP includes all scheduled event rewards.
                                 </p>
+                                {phaseXpSummary ? (
+                                    <p className="mt-1 text-xs text-slate-600">
+                                        Daily {phaseXpSummary.dailyXp} · Weekly{" "}
+                                        {phaseXpSummary.weeklyXp} · Events{" "}
+                                        {phaseXpSummary.eventXp}
+                                    </p>
+                                ) : null}
                             </div>
 
                             <section className="grid gap-4 md:grid-cols-4">

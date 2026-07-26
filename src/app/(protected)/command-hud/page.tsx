@@ -11,7 +11,16 @@ import {
   getOperationalWeekRange,
 } from "@/lib/date";
 import { getCampaignPhaseDisplayName } from "@/lib/campaign";
-import { getActiveCampaignEventState, getAlexServiceRecord, getOrCreateWeeklyOperations, getTodaySitrep, getWorkoutCountForWeek, updateWeeklyOperationCheckbox } from "@/lib/notion";
+import { getCeremonialEvent } from "@/lib/ceremonial-events";
+import {
+  getActiveCampaignEventState,
+  getAlexServiceRecord,
+  getFireteamAssignmentStatus,
+  getOrCreateWeeklyOperations,
+  getTodaySitrep,
+  getWorkoutCountForWeek,
+  updateWeeklyOperationCheckbox,
+} from "@/lib/notion";
 
 function ObjectiveRow({
   label,
@@ -116,6 +125,11 @@ export default async function CommandHudPage() {
     serviceRecordProperties["Designation"]?.title?.[0]?.plain_text ?? "NULL";
 
   const activeCampaignEventState = await getActiveCampaignEventState();
+  const fireteamAssignment = await getFireteamAssignmentStatus();
+  const ceremonialEvent = getCeremonialEvent(
+    fireteamAssignment.eligibility.state,
+    fireteamAssignment.state
+  );
   const campaignStart = "2026-06-21";
   const today = getOperationalDateKey();
   const campaignDay =
@@ -258,7 +272,7 @@ export default async function CommandHudPage() {
                 </p>
               </div>
 
-              <EventSystem>
+              <EventSystem ceremonialEvent={ceremonialEvent}>
                 <HudPanel title="Weekly Operations">
                   <div className="space-y-1">
                     <HudCheckbox

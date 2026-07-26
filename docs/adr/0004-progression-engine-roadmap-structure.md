@@ -105,14 +105,14 @@ Use the following initial affinity mapping:
 - Ellie -> Recovery
 - Zoe -> Professionalism
 
-Each Fireteam relationship has 12 granular levels grouped into four narrative phases:
+Each Fireteam relationship has 16 granular levels grouped into four narrative phases:
 
-1. Acquaintance I-III
-2. Growing Trust I-III
-3. Dependable Teammate I-III
-4. Trusted With Your Life I-III
+1. Acquaintance I-IV at 25 points per level
+2. Familiar I-IV at 50 points per level
+3. Trusted I-IV at 75 points per level
+4. Bonded I-IV at 100 points per level
 
-The inner levels make relationship development gradual without requiring 12 unrelated narrative labels. Exact point thresholds, curve shape, caps, and readiness rewards remain open for deliberate tuning after the 0.6 milestone produces trustworthy habit-volume data.
+Each qualifying habit completion contributes one point to the member associated with its readiness category. A level bar resets after advancement, and one member's complete progression totals 1,000 qualifying habits.
 
 Unit Cohesion does not decay in its initial release. Missed habits pause progress but do not erase an established relationship. This distinguishes supportive Fireteam relationships from the gradual, recoverable Command Trust decay planned for 0.8.
 
@@ -191,7 +191,7 @@ Rejected because Operational Readiness is the certification produced by Unit Coh
 
 ### Use only four coarse relationship tiers
 
-Rejected because the desired relationship arc should develop slowly. Twelve inner levels grouped into four narrative phases provide granular progress while preserving a clear emotional journey.
+Rejected because the desired relationship arc should develop slowly. Sixteen inner levels grouped into four narrative phases provide granular progress while preserving a clear emotional journey.
 
 ### Keep milestone-spanning umbrella epics
 
@@ -203,16 +203,16 @@ Rejected because Spartan remains an individual personal-readiness product. Firet
 
 ## Implementation status
 
-**Partially implemented at the product level; planned at the roadmap level.**
+**Partially implemented.**
 
-The repository contains production-system foundations and early motivation wrappers, but the milestone transformation sequence and 0.7 Fireteam systems are not implemented. The SDCB still requires an approved migration of its historical milestone, release, epic, and ticket records.
+The repository implements the canonical Fireteam Assignment transition, Fireteam Records surface, and source-auditable Unit Cohesion ingestion and relationship arithmetic. Narrative relationship unlocks, Field Exercise integration, Operational Readiness certification, and the later command-scale systems remain planned.
 
 ## Validation
 
 - Product proposals state how they feed or reinforce real-world habit completion.
 - Roadmap milestones follow the canonical 0.6 through 1.0 sequence.
 - Releases have one intended outcome and explicit exit criteria before epics are finalized.
-- Planned Fireteam behavior is not described as implemented.
+- Planned Fireteam behavior is not described as implemented; working assignment and Unit Cohesion code paths are identified as implemented.
 - SDCB changes are preceded by a reviewed ticket migration mapping.
 
 ## Reconsideration triggers

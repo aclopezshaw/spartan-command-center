@@ -3,6 +3,7 @@ import {
   findTodaySitrep,
   getAlexServiceRecordPageId,
   getHydrationTotalForOperationalDay,
+  updateDailySitrepCheckbox,
 } from "@/lib/notion";
 import { getNotionClient } from "@/lib/notion-client";
 
@@ -15,14 +16,7 @@ async function checkWaterObjectiveIfComplete() {
 
   if (!sitrep) return;
 
-  await getNotionClient().pages.update({
-    page_id: sitrep.id,
-    properties: {
-      Water: {
-        checkbox: true,
-      },
-    },
-  });
+  await updateDailySitrepCheckbox(sitrep.id, "Water", true);
 }
 
 export async function POST(request: Request) {

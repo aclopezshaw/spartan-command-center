@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { evaluateEventReadiness } from "@/lib/event-readiness";
 import { getActiveEvent } from "@/lib/events";
+import { hasAuthorizedSession } from "@/lib/auth";
 import {
   completeCampaignEvent,
   findCampaignEvent,
@@ -17,6 +18,10 @@ type CompleteEventRequest = {
 };
 
 export async function POST(request: Request) {
+  if (!(await hasAuthorizedSession())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = (await request.json()) as CompleteEventRequest;
     const eventId = typeof body.eventId === "string" ? body.eventId : null;
@@ -36,7 +41,47 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Event is not available yet" }, { status: 409 });
     }
 
-    const completedEventIds = await getCompletedCampaignEventIds(eventState.events);
+    const eventPage = await findCampaignEvent(event.id, event.pageId);
+    if (!eventPage) {
+      console.error("Campaign event record not found", { eventId: event.id });
+      return NextResponse.json({ error: "Campaign event record not found" }, { status: 500 });
+    }
+
+    if (eventPage.phaseId !== eventState.phaseId) {
+      return NextResponse.json({ error: "Campaign event phase changed. Refresh and try again." }, { status: 409 });
+    }
+
+    const serviceRecordPageId = await getAlexServiceRecordPageId();
+    const readiness = await getAlexReadinessScores();
+    const completionInput = {
+      eventPageId: eventPage.id,
+      eventId: event.id,
+      eventTitle: event.title,
+      eventType: event.type,
+      eventDay: event.unlockDay,
+      campaignDay,
+      xpReward:
+        event.xpReward ?? (event.type === "Major Event" ? 500 : 250),
+      description: event.prompt,
+      serviceRecordPageId,
+      campaignPageId: eventState.phaseId,
+      readinessSnapshot: readiness,
+      readinessRequirements: event.readinessRequirements,
+    };
+
+    if (await isCampaignEventCompleted(eventPage)) {
+      const result = await completeCampaignEvent(completionInput);
+
+      return NextResponse.json({
+        ok: true,
+        eventId: event.id,
+        alreadyCompleted: result.alreadyCompleted,
+      });
+    }
+
+    const completedEventIds = await getCompletedCampaignEventIds(
+      eventState.events
+    );
     const activeEvent = getActiveEvent(
       campaignDay,
       completedEventIds,
@@ -50,21 +95,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const eventPage = await findCampaignEvent(event.id, event.pageId);
-    if (!eventPage) {
-      console.error("Campaign event record not found", { eventId: event.id });
-      return NextResponse.json({ error: "Campaign event record not found" }, { status: 500 });
-    }
-
-    if (eventPage.phaseId !== eventState.phaseId) {
-      return NextResponse.json({ error: "Campaign event phase changed. Refresh and try again." }, { status: 409 });
-    }
-
-    if (await isCampaignEventCompleted(eventPage)) {
-      return NextResponse.json({ ok: true, eventId: event.id, alreadyCompleted: true });
-    }
-
-    const readiness = await getAlexReadinessScores();
     const evaluation = evaluateEventReadiness(event.readinessRequirements, readiness);
     if (!evaluation.eligible) {
       await markCampaignEventFailed(eventPage.id);
@@ -77,16 +107,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const serviceRecordPageId = await getAlexServiceRecordPageId();
-    const result = await completeCampaignEvent({
-      eventPageId: eventPage.id,
-      eventTitle: event.title,
-      eventType: event.type,
-      campaignDay,
-      xpReward: event.xpReward ?? (event.type === "Major Event" ? 500 : 250),
-      description: event.prompt,
-      serviceRecordPageId,
-    });
+    const result = await completeCampaignEvent(completionInput);
 
     return NextResponse.json({
       ok: true,

@@ -6,7 +6,16 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:rollover": "node --experimental-strip-types --test tests/campaign-rollover.test.mjs",
+    "test:phase-xp": "node --experimental-strip-types --test tests/phase-xp.test.mjs",
+    "test:eligibility": "node --experimental-strip-types --test tests/individual-completion.test.mjs",
+    "test:ceremonies": "node --experimental-strip-types --test tests/ceremonial-events.test.mjs",
+    "test:assignment": "node --experimental-strip-types --test tests/fireteam-assignment.test.mjs",
+    "test:cohesion": "node --experimental-strip-types --test tests/unit-cohesion.test.mjs",
+    "test:events": "node --experimental-strip-types --test tests/event-schedule.test.mjs",
+    "test:standings": "node --experimental-strip-types --test tests/fireteam-standings.test.mjs",
+    "test:campaign": "node --experimental-strip-types --test tests/campaign-rollover.test.mjs tests/phase-xp.test.mjs tests/individual-completion.test.mjs tests/ceremonial-events.test.mjs tests/fireteam-assignment.test.mjs tests/unit-cohesion.test.mjs tests/event-schedule.test.mjs tests/fireteam-standings.test.mjs"
   },
   "dependencies": {
     "@notionhq/client": "^5.22.0",

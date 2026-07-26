@@ -6,8 +6,9 @@ import { usePathname } from "next/navigation";
 const tabs = [
   { label: "Command HUD", href: "/command-hud" },
   { label: "Service Record", href: "/service-record" },
+  { label: "Fireteam", href: "/fireteam" },
   { label: "Armory", href: "/armory" },
-  { label: "Promotion Board", href: "/promotion-board" },
+  { label: "Assembly Hall", href: "/assembly-hall" },
   { label: "Service History", href: "/campaign-history" },
   { label: "Intel Reports", href: "/intel-reports" },
   { label: "Training Reports", href: "/training-reports" },

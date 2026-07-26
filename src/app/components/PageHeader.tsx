@@ -8,7 +8,7 @@ export default function PageHeader({
   title: string;
 }) {
   return (
-    <div className="flex items-start justify-between border-b border-cyan-700/50 pb-4">
+    <div className="flex flex-col items-start justify-between gap-4 border-b border-cyan-700/50 pb-4 sm:flex-row">
       <div>
         <p className="text-xs uppercase tracking-[0.4em] text-cyan-400">
           {eyebrow}
@@ -19,7 +19,7 @@ export default function PageHeader({
         </h1>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+      <div className="flex shrink-0 self-end items-center gap-2 sm:self-auto sm:gap-3">
         <div className="relative grid h-[90px] w-[78px] place-items-center sm:h-[108px] sm:w-[92px]">
           <div className="absolute inset-2 rounded-full bg-cyan-400/20 blur-xl" />
           <Image

@@ -3,10 +3,15 @@ import {
   getActiveCampaignEventState,
   getCompletedCampaignEventIds,
 } from "@/lib/notion";
+import { hasAuthorizedSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  if (!(await hasAuthorizedSession())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const eventState = await getActiveCampaignEventState();
     const completedEventIds = await getCompletedCampaignEventIds(eventState.events);
