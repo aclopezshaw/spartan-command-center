@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { evaluateRollover } from "../src/lib/campaign-rollover.ts";
+import { getHudBackground } from "../src/lib/hud-background.ts";
 
 const phaseOne = {
   id: "phase-1",
@@ -147,6 +148,35 @@ test("recognizes a fully verified rollover", () => {
 
   assert.equal(result.eligible, true);
   assert.equal(result.state, "complete");
+});
+
+test("switches the Day 1 HUD to the incoming Phase II daypart suite", () => {
+  const result = evaluate({
+    phases: [
+      { ...phaseOne, phaseStatus: "Complete", status: "Complete" },
+      { ...phaseTwo, phaseStatus: "Active", status: "Active" },
+    ],
+    historyExists: true,
+  });
+  const activePhaseName = result.transition?.target.phaseName;
+
+  assert.equal(result.state, "complete");
+  assert.equal(
+    getHudBackground(activePhaseName, 5),
+    "/images/hud/phase-ii-fireteam-room-morning.png"
+  );
+  assert.equal(
+    getHudBackground(activePhaseName, 8),
+    "/images/hud/phase-ii-classroom.png"
+  );
+  assert.equal(
+    getHudBackground(activePhaseName, 11),
+    "/images/hud/phase-ii-mess-hall.png"
+  );
+  assert.equal(
+    getHudBackground(activePhaseName, 22),
+    "/images/hud/phase-ii-fireteam-room-night.png"
+  );
 });
 
 test("keeps a secondary status mismatch in recovery", () => {

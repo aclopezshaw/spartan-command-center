@@ -12,6 +12,7 @@ import {
 } from "@/lib/date";
 import { getCampaignPhaseDisplayName } from "@/lib/campaign";
 import { getCeremonialEvent } from "@/lib/ceremonial-events";
+import { getHudBackground } from "@/lib/hud-background";
 import {
   getActiveCampaignEventState,
   getAlexServiceRecord,
@@ -169,21 +170,10 @@ export default async function CommandHudPage() {
   const planningComplete =
     weeklyProps["Planning"]?.checkbox ?? false;
 
-    const currentHour = getOperationalHour();
-    const hudBackground =
-      currentHour >= 5 && currentHour < 8
-        ? "/images/hud-obstacle-course-5.png"
-        : currentHour >= 8 && currentHour < 11
-          ? "/images/hud-tactical-class.png"
-          : currentHour >= 11 && currentHour < 13
-            ? "/images/hud-mess-hall.png"
-            : currentHour >= 13 && currentHour < 16
-              ? "/images/hud-briefing.png"
-              : currentHour >= 16 && currentHour < 20
-                ? "/images/hud-field-exercise.png"
-                : currentHour >= 20 && currentHour < 22
-                  ? "/images/hud-night-prep.png"
-                  : "/images/hud-bedtime.png";
+  const hudBackground = getHudBackground(
+    activeCampaignEventState.phaseName,
+    getOperationalHour()
+  );
 
   const dailyObjectives = [
     ["Study 30 min", 35, "Study"],
