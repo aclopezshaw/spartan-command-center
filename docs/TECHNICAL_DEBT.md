@@ -1,7 +1,7 @@
 # Technical debt
 
 **Document status:** Living debt register  
-**Last verified:** 2026-07-13  
+**Last verified:** 2026-07-26
 **Execution authority:** Spartan Dev Command Board
 
 This file records durable engineering liabilities. It does not duplicate live ticket status.
@@ -41,9 +41,9 @@ This file records durable engineering liabilities. It does not duplicate live ti
 
 ## Quality-system debt
 
-- `npm run lint` reported 46 errors and 17 warnings during the 2026-07-13 review.
-- No unit, integration, contract, or browser tests exist.
-- No continuous-integration configuration is present.
+- `npm run lint` reports 45 errors and 12 warnings. The implemented lint ratchet prevents growth but does not erase this debt.
+- The Node regression baseline covers critical pure-domain and serialized Notion-property contracts; browser automation and live Notion contract tests remain incomplete.
+- GitHub Actions runs the aggregate release gate, but production deployment smoke tests are still manual.
 - No checked-in environment-variable example or validation layer exists.
 - No `loading.tsx`, `error.tsx`, or global application error boundary exists.
 - Client fetch flows frequently omit loading, non-2xx, parsing, or network-error handling.

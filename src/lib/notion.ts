@@ -70,6 +70,10 @@ import {
   type FireteamStandingsResolution,
   type StandingsReadinessKey,
 } from "@/lib/fireteam-standings";
+import {
+  buildAchievementServiceHistoryProperties,
+  buildCampaignServiceHistoryProperties,
+} from "@/lib/service-history";
 
 type ServiceHistoryEntry = {
   eventTitle: string;
@@ -3196,62 +3200,17 @@ export async function createServiceHistoryEntry({
     parent: {
       database_id: databaseId,
     },
-    properties: {
-      Title: {
-        title: [
-          {
-            text: {
-              content: `${eventTitle} Completed`,
-            },
-          },
-        ],
-      },
-      Date: {
-        date: {
-          start: completedAt,
-        },
-      },
-      "Campaign Day": {
-        number: campaignDay,
-      },
-      "Entry Type": {
-        select: {
-          name: eventType,
-        },
-      },
-      "XP Awarded": {
-        number: xpReward,
-      },
-      "Readiness Category": {
-        select: {
-          name: "None",
-        },
-      },
-      Description: {
-        rich_text: [{ text: { content: description ?? "" } }],
-      },
-      ...(eventPageId
-        ? {
-            "Related Event": {
-              relation: [{ id: eventPageId }],
-            },
-          }
-        : {}),
-      ...(serviceRecordPageId
-        ? {
-            "Related Service Record": {
-              relation: [{ id: serviceRecordPageId }],
-            },
-          }
-        : {}),
-      ...(campaignPageId
-        ? {
-            "Related Campaign": {
-              relation: [{ id: campaignPageId }],
-            },
-          }
-        : {}),
-    },
+    properties: buildCampaignServiceHistoryProperties({
+      eventTitle,
+      eventType,
+      campaignDay,
+      xpReward,
+      description,
+      eventPageId,
+      serviceRecordPageId,
+      campaignPageId,
+      completedAt,
+    }),
   });
 }
 
@@ -3274,19 +3233,14 @@ export async function createAchievementServiceHistoryEntry({
 
   return notion.pages.create({
     parent: { database_id: databaseId },
-    properties: {
-      Title: { title: [{ text: { content: `${achievementTitle} Earned` } }] },
-      Date: { date: { start: earnedAt } },
-      "Campaign Day": { number: null },
-      "Entry Type": { select: { name: "Achievement" } },
-      "XP Awarded": { number: 0 },
-      "Readiness Category": { select: { name: category || "None" } },
-      Description: { rich_text: [{ text: { content: description ?? "" } }] },
-      "Related Achievement": { relation: [{ id: achievementPageId }] },
-      ...(serviceRecordPageId
-        ? { "Related Service Record": { relation: [{ id: serviceRecordPageId }] } }
-        : {}),
-    },
+    properties: buildAchievementServiceHistoryProperties({
+      achievementPageId,
+      achievementTitle,
+      category,
+      description,
+      earnedAt,
+      serviceRecordPageId,
+    }),
   });
 }
 

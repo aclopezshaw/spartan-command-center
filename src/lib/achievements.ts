@@ -1,8 +1,14 @@
 import {
-  addDaysToDateKey,
   getOperationalDateKey,
   getOperationalWeekRange,
 } from "@/lib/date";
+import {
+  calculateDailyAchievementStreak,
+  calculateWeeklyAchievementStreak,
+  isAchievementEarned,
+  type AchievementTrack,
+  type ObjectiveStats,
+} from "@/lib/achievement-rules";
 import {
   createAchievementServiceHistoryEntry,
   hasServiceHistoryForAchievement,
@@ -11,13 +17,6 @@ import {
   getNotionClient,
   getRequiredNotionId,
 } from "@/lib/notion-client";
-
-type AchievementTrack = "Persistence" | "Discipline" | "Classified";
-
-type ObjectiveStats = {
-  totalCompletions: number;
-  currentStreak: number;
-};
 
 type Achievement = {
   id: string;
@@ -49,28 +48,6 @@ export async function getUnearnedAchievements() {
   return response.results;
 }
 
-function calculateCurrentDailyStreak(dateStrings: string[]): number {
-  const completed = new Set(dateStrings);
-
-  let streak = 0;
-  let cursor = getOperationalDateKey();
-
-  if (!completed.has(cursor)) {
-    cursor = addDaysToDateKey(cursor, -1);
-  }
-
-  while (true) {
-    if (!completed.has(cursor)) {
-      break;
-    }
-
-    streak += 1;
-    cursor = addDaysToDateKey(cursor, -1);
-  }
-
-  return streak;
-}
-
 async function getDailyCheckboxStats(
   propertyName: string
 ): Promise<ObjectiveStats> {
@@ -95,7 +72,10 @@ async function getDailyCheckboxStats(
 
   return {
     totalCompletions: completedDates.length,
-    currentStreak: calculateCurrentDailyStreak(completedDates),
+    currentStreak: calculateDailyAchievementStreak(
+      completedDates,
+      getOperationalDateKey()
+    ),
   };
 }
 
@@ -113,17 +93,15 @@ async function getWeeklyCheckboxStats(propertyName: string): Promise<ObjectiveSt
     .map((page: any) => page.properties?.["Week Start"]?.date?.start)
     .filter(Boolean)
     .map((value: string) => value.split("T")[0]);
-  const completed = new Set(completedWeeks);
   const { startDateKey: currentWeek } = getOperationalWeekRange(new Date(), 0);
-  let cursor = currentWeek;
-  if (!completed.has(cursor)) cursor = addDaysToDateKey(cursor, -7);
-  let currentStreak = 0;
-  while (completed.has(cursor)) {
-    currentStreak += 1;
-    cursor = addDaysToDateKey(cursor, -7);
-  }
 
-  return { totalCompletions: completedWeeks.length, currentStreak };
+  return {
+    totalCompletions: completedWeeks.length,
+    currentStreak: calculateWeeklyAchievementStreak(
+      completedWeeks,
+      currentWeek
+    ),
+  };
 }
 
 async function getObjectiveStats(objective: string): Promise<ObjectiveStats> {
@@ -164,21 +142,6 @@ async function getObjectiveStats(objective: string): Promise<ObjectiveStats> {
         currentStreak: 0,
       };
   }
-}
-
-function isAchievementEarned(
-  achievement: Achievement,
-  stats: ObjectiveStats
-): boolean {
-  if (achievement.track === "Persistence") {
-    return stats.totalCompletions >= achievement.reqValue;
-  }
-
-  if (achievement.track === "Discipline") {
-    return stats.currentStreak >= achievement.reqValue;
-  }
-
-  return false;
 }
 
 async function awardAchievement(achievement: Achievement, date: string) {

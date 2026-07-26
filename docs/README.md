@@ -36,6 +36,7 @@ The authority boundaries are recorded in [ADR-0002](adr/0002-source-of-truth-hie
 - [Product Architecture Map](PRODUCT_ARCHITECTURE_MAP.md) — visual milestone, release, and epic hierarchy with direct SDCB ticket counts.
 - [Roadmap](ROADMAP.md) — planned, proposed, and deferred direction.
 - [Technical Debt](TECHNICAL_DEBT.md) — known engineering liabilities and verified tickets.
+- [Quality Gates](QUALITY_GATES.md) — implemented release validation, regression scope, and lint-ratchet policy.
 - [Architecture Decision Records](adr/README.md) — decisions and proposals with consequences.
 - [Phase II HUD Backgrounds](PHASE_II_HUD_BACKGROUNDS.md) — ordinary Fireteam Operations daypart plates and uniform-continuity rules.
 - [Migration Notes](MIGRATION_NOTES.md) — preserved historical context from earlier discussions.

@@ -1,0 +1,22 @@
+{
+  "errors": 45,
+  "warnings": 12,
+  "byFileRule": {
+    "src/app/(protected)/command-hud/page.tsx::@typescript-eslint/no-unused-vars::warning": 4,
+    "src/app/(protected)/command-hud/page.tsx::@typescript-eslint/no-explicit-any::error": 5,
+    "src/app/(protected)/intel-reports/page.tsx::@typescript-eslint/no-explicit-any::error": 1,
+    "src/app/(protected)/medical-unit/page.tsx::@typescript-eslint/no-unused-vars::warning": 1,
+    "src/app/(protected)/medical-unit/page.tsx::react-hooks/set-state-in-effect::error": 1,
+    "src/app/(protected)/medical-unit/page.tsx::react/no-unescaped-entities::error": 1,
+    "src/app/(protected)/service-record/page.tsx::@typescript-eslint/no-explicit-any::error": 9,
+    "src/app/(protected)/service-record/page.tsx::@typescript-eslint/no-unused-vars::warning": 2,
+    "src/app/api/intel-books/route.ts::@typescript-eslint/no-explicit-any::error": 4,
+    "src/app/api/intel-reports/route.ts::@typescript-eslint/no-explicit-any::error": 1,
+    "src/app/api/mobile/hud/route.ts::@typescript-eslint/no-explicit-any::error": 1,
+    "src/app/api/smu/orders/route.ts::@typescript-eslint/no-explicit-any::error": 10,
+    "src/app/api/smu/orders/route.ts::@typescript-eslint/no-unused-vars::warning": 5,
+    "src/app/api/smu/pipeline/route.ts::@typescript-eslint/no-explicit-any::error": 4,
+    "src/lib/achievements.ts::@typescript-eslint/no-explicit-any::error": 3,
+    "src/lib/notion.ts::@typescript-eslint/no-explicit-any::error": 5
+  }
+}

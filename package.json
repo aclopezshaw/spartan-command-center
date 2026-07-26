@@ -7,6 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "lint:ratchet": "node scripts/check-lint-baseline.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "validate:release": "npm run test && npm run typecheck && npm run lint:ratchet && npm run build",
     "test:rollover": "node --experimental-strip-types --test tests/campaign-rollover.test.mjs",
     "test:phase-xp": "node --experimental-strip-types --test tests/phase-xp.test.mjs",
     "test:eligibility": "node --experimental-strip-types --test tests/individual-completion.test.mjs",
@@ -18,7 +22,8 @@
     "test:hud-backgrounds": "node --experimental-strip-types --test tests/hud-background.test.mjs",
     "test:auth": "node --experimental-strip-types --test tests/session-token.test.mjs",
     "test:authorization": "node --experimental-strip-types --test tests/session-token.test.mjs tests/route-authorization.test.mjs",
-    "test:campaign": "node --experimental-strip-types --test tests/campaign-rollover.test.mjs tests/phase-xp.test.mjs tests/individual-completion.test.mjs tests/ceremonial-events.test.mjs tests/fireteam-assignment.test.mjs tests/unit-cohesion.test.mjs tests/event-schedule.test.mjs tests/fireteam-standings.test.mjs tests/hud-background.test.mjs"
+    "test:campaign": "node --experimental-strip-types --test tests/campaign-rollover.test.mjs tests/phase-xp.test.mjs tests/individual-completion.test.mjs tests/ceremonial-events.test.mjs tests/fireteam-assignment.test.mjs tests/unit-cohesion.test.mjs tests/event-schedule.test.mjs tests/fireteam-standings.test.mjs tests/hud-background.test.mjs",
+    "test:foundation": "node --experimental-strip-types --test tests/operational-date.test.mjs tests/achievement-rules.test.mjs tests/service-history-contract.test.mjs tests/session-token.test.mjs tests/route-authorization.test.mjs tests/lint-ratchet.test.mjs"
   },
   "dependencies": {
     "@notionhq/client": "^5.22.0",

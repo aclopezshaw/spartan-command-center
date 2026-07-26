@@ -40,11 +40,18 @@ Open [http://localhost:3000](http://localhost:3000).
 Available validation commands:
 
 ```bash
+npm run test
+npm run typecheck
+npm run lint:ratchet
 npm run lint
 npm run build
+npm run validate:release
 ```
 
-The production build currently succeeds in the reviewed environment. The lint command currently reports existing technical debt; see [`docs/TECHNICAL_DEBT.md`](docs/TECHNICAL_DEBT.md).
+`npm run validate:release` is the required aggregate gate for tests, TypeScript,
+the lint ratchet, and the production build. The raw lint command still reports
+visible existing technical debt; see [`docs/QUALITY_GATES.md`](docs/QUALITY_GATES.md)
+and [`docs/TECHNICAL_DEBT.md`](docs/TECHNICAL_DEBT.md).
 
 ## Documentation
 
@@ -54,6 +61,7 @@ The production build currently succeeds in the reviewed environment. The lint co
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — current technical architecture.
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — planned, proposed, and deferred direction.
 - [`docs/TECHNICAL_DEBT.md`](docs/TECHNICAL_DEBT.md) — known engineering liabilities.
+- [`docs/QUALITY_GATES.md`](docs/QUALITY_GATES.md) — release validation, regression scope, and lint-ratchet policy.
 - [`docs/adr/README.md`](docs/adr/README.md) — architecture decision records.
 - [`docs/MIGRATION_NOTES.md`](docs/MIGRATION_NOTES.md) — preserved historical context and migration source.
 
