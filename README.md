@@ -24,7 +24,7 @@ Several surfaces are only partially implemented. See [`docs/SYSTEM_STATUS.md`](d
 - npm.
 - A Notion integration and the environment variables required by the current Route Handlers.
 
-Environment files are ignored by Git. Never commit `NOTION_TOKEN`, `SITE_PASSWORD`, or database identifiers containing sensitive workspace information.
+Environment files are ignored by Git. Never commit `NOTION_TOKEN`, `SITE_PASSWORD`, `SESSION_SECRET`, or database identifiers containing sensitive workspace information. Production authentication requires a cryptographically random `SESSION_SECRET` containing at least 32 bytes.
 
 ## Local development
 
@@ -66,4 +66,3 @@ The production build currently succeeds in the reviewed environment. The lint co
 5. Git history records implementation changes.
 
 When sources conflict, document the conflict and create or update an SDCB ticket. Do not silently reinterpret the implementation.
-

@@ -16,6 +16,8 @@
     "test:events": "node --experimental-strip-types --test tests/event-schedule.test.mjs",
     "test:standings": "node --experimental-strip-types --test tests/fireteam-standings.test.mjs",
     "test:hud-backgrounds": "node --experimental-strip-types --test tests/hud-background.test.mjs",
+    "test:auth": "node --experimental-strip-types --test tests/session-token.test.mjs",
+    "test:authorization": "node --experimental-strip-types --test tests/session-token.test.mjs tests/route-authorization.test.mjs",
     "test:campaign": "node --experimental-strip-types --test tests/campaign-rollover.test.mjs tests/phase-xp.test.mjs tests/individual-completion.test.mjs tests/ceremonial-events.test.mjs tests/fireteam-assignment.test.mjs tests/unit-cohesion.test.mjs tests/event-schedule.test.mjs tests/fireteam-standings.test.mjs tests/hud-background.test.mjs"
   },
   "dependencies": {

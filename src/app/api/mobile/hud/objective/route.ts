@@ -4,6 +4,7 @@ import {
   updateDailySitrepCheckbox,
 } from "@/lib/notion";
 import { evaluateAchievements } from "@/lib/achievements";
+import { hasAuthorizedSession } from "@/lib/auth";
 
 const OBJECTIVE_TO_SITREP_PROPERTY: Record<string, string> = {
   study: "Study",
@@ -18,6 +19,13 @@ const OBJECTIVE_TO_SITREP_PROPERTY: Record<string, string> = {
 };
 
 export async function POST(request: Request) {
+  if (!(await hasAuthorizedSession())) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    );
+  }
+
   const body = await request.json();
   const { id, completed } = body;
 

@@ -45,3 +45,4 @@ Do not use an ADR for routine implementation details, bug reports, or task track
 | [ADR-0005](0005-live-operations-shields-and-branching.md) | Accepted | Structure Live Operations around graduation, habit-recharged Shields, truthful Mission Intel, branching checkpoints, and Armory progression. |
 | [ADR-0006](0006-command-school-trust-and-qualification.md) | Accepted | Structure Command School around durable assignment, recoverable Command Trust, Battalion Command, and a qualification-only handoff to Specialization School. |
 | [ADR-0007](0007-academic-operations-and-specialization-overlay.md) | Accepted | Keep Academic Operations authoritative and domain-neutral while Specialization School consumes private, versioned evidence through a configurable canon overlay. |
+| [ADR-0008](0008-signed-single-user-sessions.md) | Accepted | Replace the forgeable static cookie with signed, expiring single-user sessions and require authorization at every private Route Handler. |

@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
 import { evaluateAchievements } from "@/lib/achievements";
+import { hasAuthorizedSession } from "@/lib/auth";
 
 export async function POST() {
+  if (!(await hasAuthorizedSession())) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    );
+  }
+
   try {
     const awarded = await evaluateAchievements();
 

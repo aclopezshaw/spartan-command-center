@@ -1,15 +1,57 @@
 import { NextResponse } from "next/server";
 import { getNotionClient } from "@/lib/notion-client";
+import { hasAuthorizedSession } from "@/lib/auth";
+
+type IntelReportRequest = {
+  bookId?: unknown;
+  bookTitle?: unknown;
+  pageReadTo?: unknown;
+  notes?: unknown;
+};
+
+function isNotionPageId(value: string) {
+  return /^[0-9a-f]{32}$/i.test(value.replaceAll("-", ""));
+}
 
 export async function POST(request: Request) {
+  if (!(await hasAuthorizedSession())) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    );
+  }
+
   try {
     const notion = getNotionClient();
     const databaseId = process.env.READING_REPORTS_DATABASE_ID;
     if (!databaseId) throw new Error("Missing READING_REPORTS_DATABASE_ID");
 
-    const { bookId, bookTitle, pageReadTo, notes } = await request.json();
+    const body = (await request.json()) as IntelReportRequest;
+    const bookId =
+      typeof body.bookId === "string" ? body.bookId.trim() : "";
+    const bookTitle =
+      typeof body.bookTitle === "string"
+        ? body.bookTitle.trim()
+        : "";
+    const notes =
+      typeof body.notes === "string" ? body.notes.trim() : "";
 
-    const newPage = Number(pageReadTo);
+    const newPage = Number(body.pageReadTo);
+
+    if (
+      !isNotionPageId(bookId) ||
+      !bookTitle ||
+      bookTitle.length > 300 ||
+      notes.length > 5_000 ||
+      !Number.isInteger(newPage) ||
+      newPage < 1 ||
+      newPage > 100_000
+    ) {
+      return NextResponse.json(
+        { error: "Invalid Intel Report request" },
+        { status: 400 }
+      );
+    }
 
     const archivePage = await notion.pages.retrieve({
       page_id: bookId,

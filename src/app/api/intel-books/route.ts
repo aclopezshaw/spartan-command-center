@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getNotionClient } from "@/lib/notion-client";
+import { hasAuthorizedSession } from "@/lib/auth";
 
 function getTitle(page: any) {
   const property = page.properties.Title;
@@ -37,6 +38,13 @@ function getNumber(page: any, propertyName: string) {
 }
 
 export async function GET() {
+  if (!(await hasAuthorizedSession())) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    );
+  }
+
   const notion = getNotionClient();
   const databaseId = process.env.ARCHIVES_DATABASE_ID;
 

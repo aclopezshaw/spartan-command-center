@@ -1,7 +1,7 @@
 # Architecture
 
 **Document status:** Living description of current architecture  
-**Last verified:** 2026-07-25
+**Last verified:** 2026-07-26
 
 ## Overview
 
@@ -34,7 +34,7 @@ The diagram describes current connections, not desired security or persistence b
 
 - `src/app/page.tsx` exposes the public login page through `LoginPage`.
 - `src/app/(protected)/layout.tsx` wraps eight protected page routes through `ProtectedLayout`.
-- `src/app/api/**/route.ts` exposes 26 Route Handler files.
+- `src/app/api/**/route.ts` exposes 27 Route Handler files.
 - `src/app/components` contains shared presentation and interactive components.
 - `src/lib` contains shared Notion, achievement, event, and date logic.
 - `src/data/events.ts` is the repository-owned event catalog.
@@ -48,7 +48,7 @@ The `(protected)` route group organizes pages without changing their URLs, consi
 
 `CommandHudPage` in `src/app/(protected)/command-hud/page.tsx` and `Home` in `src/app/(protected)/service-record/page.tsx` execute server-side and call Notion directly. Both export `dynamic = "force-dynamic"` and `revalidate = 0`.
 
-`ProtectedLayout` awaits `cookies()` and redirects requests that lack the expected cookie value.
+`ProtectedLayout` calls the centralized, server-only `hasAuthorizedSession` verifier and redirects requests that lack an authentic, unexpired signed session.
 
 ### Client Components
 
@@ -67,7 +67,18 @@ Notion client construction is centralized:
 - Server Components, Route Handlers, and `src/lib/achievements.ts` obtain the SDK through the shared accessor rather than constructing module-local clients.
 - Route-specific queries remain close to their domains, while required identifier lookup produces explicit missing-configuration errors.
 
-Schema mapping, pagination, authorization, and error translation are still distributed technical debt; ticket #11 centralizes the client and the duplicated domain operations without claiming that the full data-access layer is complete.
+Schema mapping, pagination, and error translation remain distributed technical debt. Authorization is centralized through `src/lib/auth.ts`, and every private Route Handler verifies the signed session before reading or mutating Notion.
+
+## Authentication and authorization
+
+[ADR-0008](adr/0008-signed-single-user-sessions.md) records the current single-user session boundary.
+
+1. `POST /api/login` validates the ALEX-225 designation and server-held `SITE_PASSWORD`, then signs a versioned seven-day token with the production `SESSION_SECRET`.
+2. The response stores the token in the `scp_session` cookie with `HttpOnly`, production `Secure`, `SameSite=Strict`, path `/`, and high-priority attributes. It deletes the retired `scp_auth` cookie.
+3. `hasAuthorizedSession` reads the cookie through the asynchronous Next.js `cookies()` API and rejects malformed, tampered, wrong-secret, expired, future-dated, or wrong-subject tokens.
+4. `ProtectedLayout` applies that verifier to all protected pages. Every private Route Handler applies the same verifier independently because layouts do not authorize Route Handlers.
+5. `POST /api/logout` deletes both current and legacy authentication cookies. Login and logout are the only public Route Handlers.
+6. Production fails closed if a dedicated `SESSION_SECRET` of at least 32 bytes is unavailable. Local development may derive a development-only key from `SITE_PASSWORD`.
 
 ## Main request flows
 

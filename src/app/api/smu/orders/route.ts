@@ -6,6 +6,7 @@ import {
     getOperationalDateKeyFromValue,
 } from "@/lib/date";
 import { getNotionClient } from "@/lib/notion-client";
+import { hasAuthorizedSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -134,6 +135,13 @@ async function getRelationTitle(property: any) {
 }
 
 export async function GET() {
+    if (!(await hasAuthorizedSession())) {
+        return NextResponse.json(
+            { error: "Unauthorized" },
+            { status: 401 }
+        );
+    }
+
     try {
         const notion = getNotionClient();
         const databaseId = process.env.ASSIGNMENTS_DATA_SOURCE_ID;

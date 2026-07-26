@@ -5,6 +5,7 @@ import {
     getOperationalWeekRange,
 } from "@/lib/date";
 import { getNotionClient } from "@/lib/notion-client";
+import { hasAuthorizedSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -84,6 +85,13 @@ async function getAllAssignments(dataSourceId: string) {
 }
 
 export async function GET() {
+    if (!(await hasAuthorizedSession())) {
+        return NextResponse.json(
+            { error: "Unauthorized" },
+            { status: 401 }
+        );
+    }
+
     try {
         const dataSourceId = process.env.ASSIGNMENTS_DATA_SOURCE_ID;
 

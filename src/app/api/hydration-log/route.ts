@@ -6,6 +6,7 @@ import {
   updateDailySitrepCheckbox,
 } from "@/lib/notion";
 import { getNotionClient } from "@/lib/notion-client";
+import { hasAuthorizedSession } from "@/lib/auth";
 
 async function checkWaterObjectiveIfComplete() {
   const total = await getHydrationTotalForOperationalDay();
@@ -20,6 +21,13 @@ async function checkWaterObjectiveIfComplete() {
 }
 
 export async function POST(request: Request) {
+  if (!(await hasAuthorizedSession())) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    );
+  }
+
   try {
     const notion = getNotionClient();
     const databaseId = process.env.HYDRATION_LOG_DATABASE_ID;
@@ -28,9 +36,13 @@ export async function POST(request: Request) {
     const { amount } = await request.json();
     const parsedAmount = Number(amount);
 
-    if (!parsedAmount || parsedAmount <= 0) {
+    if (
+      !Number.isFinite(parsedAmount) ||
+      parsedAmount <= 0 ||
+      parsedAmount > 256
+    ) {
       return NextResponse.json(
-        { error: "Hydration amount must be greater than 0." },
+        { error: "Hydration amount must be between 0 and 256 ounces." },
         { status: 400 }
       );
     }

@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server";
 import { getTodaySitrep } from "@/lib/notion";
+import { hasAuthorizedSession } from "@/lib/auth";
 
 function getCheckbox(page: any, propertyName: string) {
   return page?.properties?.[propertyName]?.checkbox ?? false;
 }
 
 export async function GET() {
+  if (!(await hasAuthorizedSession())) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    );
+  }
+
   const todaySitrep = await getTodaySitrep();
 
   return NextResponse.json({
