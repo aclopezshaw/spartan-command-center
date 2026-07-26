@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type ReactNode, useEffect, useState } from "react";
 import { areAllCampaignEventsComplete, getActiveEvent, getNextEvent } from "@/lib/events";
 import { getEventReadinessCopy } from "@/lib/event-readiness";
+import { getEventOutcomeState } from "@/lib/event-outcome";
 import { getCampaignPhaseDisplayName } from "@/lib/campaign";
 import { CampaignEvent } from "@/data/events";
 import type { CeremonialEvent } from "@/lib/ceremonial-events";
@@ -14,6 +15,9 @@ type CompletionResponse = {
   ok?: boolean;
   error?: string;
   unmetRequirements?: string[];
+  eventStatus?: CampaignEvent["persistedStatus"];
+  retryAvailableDay?: number | null;
+  scheduleDelayDays?: number;
 };
 
 export function EventSystem({
@@ -79,6 +83,13 @@ export function EventSystem({
     : undefined;
   const phaseComplete =
     loaded && !loadError && areAllCampaignEventsComplete(completedEventIds, events);
+  const activeEventOutcome = activeEvent && campaignDay !== null
+    ? getEventOutcomeState({
+        event: activeEvent,
+        campaignDay,
+        completedEventIds,
+      })
+    : null;
 
   async function completeEvent() {
     if (!activeEvent || isSaving) return;
@@ -95,6 +106,33 @@ export function EventSystem({
       const body = (await response.json()) as CompletionResponse;
 
       if (!response.ok || !body.ok) {
+        if (body.eventStatus === "Failed") {
+          setEvents((previous) =>
+            previous.map((event) =>
+              event.id === activeEvent.id
+                ? {
+                    ...event,
+                    persistedStatus: "Failed",
+                    unlockDay:
+                      body.retryAvailableDay ??
+                      event.unlockDay,
+                    retryAvailableDay:
+                      body.retryAvailableDay === undefined
+                        ? event.retryAvailableDay
+                        : body.retryAvailableDay,
+                  }
+                : (body.scheduleDelayDays ?? 0) > 0 &&
+                    event.unlockDay > activeEvent.unlockDay
+                  ? {
+                      ...event,
+                      unlockDay:
+                        event.unlockDay +
+                        (body.scheduleDelayDays ?? 0),
+                    }
+                : event
+            )
+          );
+        }
         const details = body.unmetRequirements?.join(". ");
         throw new Error(details || body.error || "Unable to save event completion");
       }
@@ -128,6 +166,8 @@ export function EventSystem({
         event={activeEvent}
         campaignDay={activeCampaignDay}
         isActive
+        outcomeState={activeEventOutcome ?? undefined}
+        retryAvailableDay={activeEvent.retryAvailableDay}
         onReview={() => {
           setCompletionError(null);
           setReviewingEventId(activeEvent.id);
@@ -193,13 +233,18 @@ export function EventSystem({
       )}
 
       {activeEvent && reviewingEventId === activeEvent.id && (
-        <div className="absolute left-1/2 top-1/2 z-30 w-[420px] -translate-x-1/2 -translate-y-1/2 border border-cyan-400 bg-black/90 p-6 text-xs text-slate-200 shadow-[0_0_35px_rgba(34,211,238,0.45)]">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="event-review-title"
+          className="absolute left-1/2 top-1/2 z-30 w-[420px] -translate-x-1/2 -translate-y-1/2 border border-cyan-400 bg-black/90 p-6 text-xs text-slate-200 shadow-[0_0_35px_rgba(34,211,238,0.45)]"
+        >
           <p className="font-bold uppercase tracking-[0.25em] text-cyan-300">Event Review</p>
-          <p className="mt-3 text-lg font-bold uppercase text-slate-100">{activeEvent.title}</p>
+          <p id="event-review-title" className="mt-3 text-lg font-bold uppercase text-slate-100">{activeEvent.title}</p>
           <p className="mt-3 font-bold text-slate-100">Requirement: {getEventReadinessCopy(activeEvent)}</p>
           <p className="mt-2 text-slate-400">Completion is confirmed only after the operational record saves.</p>
           {completionError && (
-            <p className="mt-3 border border-amber-400/50 bg-amber-500/10 p-2 text-amber-200">
+            <p role="alert" className="mt-3 border border-amber-400/50 bg-amber-500/10 p-2 text-amber-200">
               {completionError}
             </p>
           )}
@@ -209,6 +254,17 @@ export function EventSystem({
             className="mt-4 w-full border border-emerald-400 bg-emerald-500/10 py-2 font-bold uppercase tracking-[0.2em] text-emerald-300 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSaving ? "Saving Event…" : "Mark Event Complete"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setReviewingEventId(null);
+              setCompletionError(null);
+            }}
+            disabled={isSaving}
+            className="mt-2 w-full border border-slate-600 py-2 font-bold uppercase tracking-[0.2em] text-slate-300 hover:border-slate-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Close Review
           </button>
         </div>
       )}

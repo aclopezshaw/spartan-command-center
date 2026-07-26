@@ -26,6 +26,7 @@ export type SpartanEvent = {
   buttonText: string;
   backgroundImage?: string;
   xpReward?: number;
+  retryDelayDays?: number;
   readinessRequirements?: EventReadinessRequirements;
 };
 
@@ -39,6 +40,8 @@ export type CampaignEvent = SpartanEvent & {
   phaseId: string | null;
   persistedStatus: "Locked" | "Active" | "Failed" | "Defeated" | "Unknown";
   completedAt: string | null;
+  retryAvailableDay: number | null;
+  retrySlotsUsed: number;
 };
 
 export const eventCatalog: SpartanEvent[] = [

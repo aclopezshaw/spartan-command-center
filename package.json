@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "lint:ratchet": "node scripts/check-lint-baseline.mjs",
+    "migrate:event-retry-schema": "node --env-file=.env.local scripts/migrate-event-retry-schema.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "validate:release": "npm run test && npm run typecheck && npm run lint:ratchet && npm run build",
@@ -17,12 +18,12 @@
     "test:ceremonies": "node --experimental-strip-types --test tests/ceremonial-events.test.mjs",
     "test:assignment": "node --experimental-strip-types --test tests/fireteam-assignment.test.mjs",
     "test:cohesion": "node --experimental-strip-types --test tests/unit-cohesion.test.mjs",
-    "test:events": "node --experimental-strip-types --test tests/event-schedule.test.mjs",
+    "test:events": "node --experimental-strip-types --test tests/event-schedule.test.mjs tests/event-outcome.test.mjs",
     "test:standings": "node --experimental-strip-types --test tests/fireteam-standings.test.mjs",
     "test:hud-backgrounds": "node --experimental-strip-types --test tests/hud-background.test.mjs",
     "test:auth": "node --experimental-strip-types --test tests/session-token.test.mjs",
     "test:authorization": "node --experimental-strip-types --test tests/session-token.test.mjs tests/route-authorization.test.mjs",
-    "test:campaign": "node --experimental-strip-types --test tests/campaign-rollover.test.mjs tests/phase-xp.test.mjs tests/individual-completion.test.mjs tests/ceremonial-events.test.mjs tests/fireteam-assignment.test.mjs tests/unit-cohesion.test.mjs tests/event-schedule.test.mjs tests/fireteam-standings.test.mjs tests/hud-background.test.mjs",
+    "test:campaign": "node --experimental-strip-types --test tests/campaign-rollover.test.mjs tests/phase-xp.test.mjs tests/individual-completion.test.mjs tests/ceremonial-events.test.mjs tests/fireteam-assignment.test.mjs tests/unit-cohesion.test.mjs tests/event-schedule.test.mjs tests/event-outcome.test.mjs tests/fireteam-standings.test.mjs tests/hud-background.test.mjs",
     "test:foundation": "node --experimental-strip-types --test tests/operational-date.test.mjs tests/achievement-rules.test.mjs tests/service-history-contract.test.mjs tests/session-token.test.mjs tests/route-authorization.test.mjs tests/lint-ratchet.test.mjs"
   },
   "dependencies": {

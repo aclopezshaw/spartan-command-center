@@ -17,10 +17,10 @@ export function getEventStatus(
   );
 }
 
-export function getActiveEvent(
+export function getActiveEvent<T extends SpartanEvent = SpartanEvent>(
   campaignDay: number,
   completedEventIds: string[] = [],
-  events: SpartanEvent[] = eventCatalog
+  events: T[] = eventCatalog as T[]
 ) {
   return getFirstActiveScheduledEvent(
     events,
@@ -29,10 +29,10 @@ export function getActiveEvent(
   );
 }
 
-export function getNextEvent(
+export function getNextEvent<T extends SpartanEvent = SpartanEvent>(
   campaignDay: number,
   completedEventIds: string[] = [],
-  events: SpartanEvent[] = eventCatalog
+  events: T[] = eventCatalog as T[]
 ) {
   return getNextScheduledEvent(
     events,

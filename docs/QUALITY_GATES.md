@@ -29,6 +29,7 @@ The checked-in Node harness covers:
 - signed-session integrity and private Route Handler authorization;
 - America/Denver date, week, and DST boundaries;
 - campaign rollover, phase XP, event scheduling, and event completion;
+- event failure, campaign-day cooldown, retry-ready, terminal-failed, missed, and phase-complete outcomes;
 - Individual completion eligibility and Fireteam assignment recovery;
 - ceremonial presentation, Unit Cohesion, Fireteam standings, and Phase II HUD rollover;
 - Persistence and Discipline achievement threshold/streak rules;

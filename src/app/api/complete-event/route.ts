@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { evaluateEventReadiness } from "@/lib/event-readiness";
 import { getActiveEvent } from "@/lib/events";
+import {
+  calculateRetrySchedule,
+  getEventOutcomeState,
+} from "@/lib/event-outcome";
 import { hasAuthorizedSession } from "@/lib/auth";
 import {
   completeCampaignEvent,
@@ -95,13 +99,54 @@ export async function POST(request: Request) {
       );
     }
 
-    const evaluation = evaluateEventReadiness(event.readinessRequirements, readiness);
-    if (!evaluation.eligible) {
-      await markCampaignEventFailed(eventPage.id);
+    const outcome = getEventOutcomeState({
+      event,
+      campaignDay,
+      completedEventIds,
+    });
+
+    if (outcome === "cooldown") {
       return NextResponse.json(
         {
-          error: "Event failed readiness review. Update readiness and retry.",
+          error: "Event review cooldown is still active.",
+          eventStatus: "Failed",
+          retryAvailableDay: event.retryAvailableDay,
+        },
+        { status: 429 }
+      );
+    }
+
+    const evaluation = evaluateEventReadiness(event.readinessRequirements, readiness);
+    if (!evaluation.eligible) {
+      const latestScheduledDay = Math.max(
+        ...eventState.events.map((candidate) => candidate.unlockDay)
+      );
+      const retrySchedule = calculateRetrySchedule({
+        campaignDay,
+        eventDay: event.unlockDay,
+        latestScheduledDay,
+        phaseLength: eventState.phaseLength ?? latestScheduledDay,
+        retryDelayDays: event.retryDelayDays ?? 5,
+      });
+      const retryAvailableDay =
+        retrySchedule?.retryAvailableDay ?? null;
+      await markCampaignEventFailed(
+        eventPage.id,
+        retryAvailableDay,
+        event.retrySlotsUsed +
+          (retrySchedule?.retrySlotsConsumed ?? 0)
+      );
+      return NextResponse.json(
+        {
+          error:
+            retryAvailableDay === null
+              ? "Event failed readiness review. No retry days remain in this phase."
+              : `Event failed readiness review. Retry authorized on Campaign Day ${retryAvailableDay}.`,
           unmetRequirements: evaluation.unmetRequirements,
+          eventStatus: "Failed",
+          retryAvailableDay,
+          scheduleDelayDays:
+            retrySchedule?.scheduleDelayDays ?? 0,
         },
         { status: 422 }
       );

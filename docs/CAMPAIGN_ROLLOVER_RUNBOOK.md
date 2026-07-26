@@ -159,10 +159,18 @@ On Phase II Day 1, the response must contain only these five Phase II events and
 
 On Day 5, Fireteam Coordination Drill must be the active event. Completion is server-authoritative:
 
-- a failed readiness review writes `Failed` and remains retryable;
+- a failed readiness review writes `Failed` plus a `Retry Available Day` derived from the Event's `Retry Delay Days`;
+- current Event records use five campaign days; a retry consumes the next slot and shifts every remaining Event by the same interval;
+- a premature retry renders a positive campaign-day countdown and is rejected with HTTP `429`;
+- a retry is authorized only when that shift leaves enough reserve capacity for every remaining Event; otherwise the HUD renders `Event Failed — No Retry Available` and does not expose another review action;
+- a past-due unresolved event remains incomplete and displays `Past Due — Review Required`;
 - a successful completion creates exactly one XP-bearing Minor or Major Event Service History row related to the Event;
 - the Event then verifies `Defeated` with `Date Completed`;
 - a repeated request returns or repairs the existing result and does not add XP.
+
+After the final authoritative Event completes, the HUD must render `All Events
+Complete for This Phase` rather than a blank slot. This terminal presentation
+does not itself execute campaign rollover.
 
 Phase II competition also creates one zero-XP `System` row titled:
 

@@ -111,13 +111,14 @@ Daily record selection and hydration aggregation now share the America/Denver op
 ### Event completion
 
 1. `getActiveCampaignEventState` loads Event records from Notion, resolves their related Campaign Operations phase records, and returns the active campaign name, phase name, next phase name, phase length, schedule, and authoritative campaign day. Event records without a legacy `Event ID` use their stable Notion page ID for application identity, while completion is derived directly from the resolved record and linked history.
-2. `EventSystem` loads that server-derived state from `/api/events/status`, derives the current or next phase event, and keeps local state only after a successful completion response.
+2. `EventSystem` loads that server-derived state from `/api/events/status`. `getEventOutcomeState` distinguishes upcoming, active, past-due incomplete, failed cooldown, retry-ready, terminal failed, and completed outcomes from the authoritative campaign day plus persisted Event fields.
 3. Authenticated `/api/complete-event` accepts only an event identifier; it rejects events outside the active phase, events before their scheduled campaign day, and later events while an earlier one is unresolved. The exact Notion page ID resolved from the active phase is retrieved before any legacy Event ID lookup, preventing a stale same-ID row from replacing the active record.
-4. The Route Handler evaluates authoritative readiness and writes `Failed` only for an unsuccessful review.
+4. Before readiness evaluation, the Route Handler enforces the Event's persisted `Retry Available Day`. An unsuccessful review writes `Failed` and attempts to consume the next Notion-owned five-day retry slot. `Retry Slots Used` shifts the failed Event and every later Event together, so a retry is authorized only when the complete remaining schedule still fits inside the phase. Without that reserve capacity, the retry day is persisted as null and the result is terminal.
 5. On Phase II success, the server snapshots readiness and persists one deterministic Fireteam Standings resolution before reconciling exactly one XP-bearing Event Service History record and finally writing the Event record as `Defeated` with a Denver date key.
 6. Standings preserve Epsilon's readiness-earned score, assign the four remaining unique values through seeded weighted rival ordering, persist cumulative totals and wins, and rank cumulative ties by wins then final-major placement. The seed and arithmetic remain server-side.
 7. Event and standings writes use exact-record recovery and in-process concurrency coalescing. Retries return or repair the persisted resolution; duplicate records surface as conflicts instead of rerolling.
-8. Legacy catalog entries remain presentation fallbacks for event copy and artwork while scheduling, readiness requirements, phase scope, and completion state come from Notion.
+8. Successful completion clears the retry day. Failed, retry-ready, and terminal-failed presentation survives refresh, past-due events remain incomplete and actionable, cooldown copy never renders zero or negative days, and a phase with every authoritative event completed renders `All Events Complete for This Phase`.
+9. Legacy catalog entries remain presentation fallbacks for event copy and artwork while scheduling, readiness requirements, retry policy, phase scope, and completion state come from Notion.
 
 ### Campaign phase rollover
 

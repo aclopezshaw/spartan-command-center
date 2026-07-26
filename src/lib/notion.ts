@@ -12,6 +12,7 @@ import {
 } from "@/lib/notion-client";
 import { CampaignEvent, ReadinessScores } from "@/data/events";
 import { eventCatalog } from "@/data/events";
+import { applyRetrySchedule } from "@/lib/event-outcome";
 import {
   evaluateRollover,
   getRolloverHistoryTitle,
@@ -129,6 +130,9 @@ type EventQueryResult = {
     "Bonus Req"?: { number?: number | null };
     Status?: { select?: { name?: string } | null };
     "Date Completed"?: { date?: { start?: string | null } | null };
+    "Retry Delay Days"?: { number?: number | null };
+    "Retry Available Day"?: { number?: number | null };
+    "Retry Slots Used"?: { number?: number | null };
   };
 };
 
@@ -403,6 +407,12 @@ function toCampaignEvent(event: EventQueryResult): CampaignEvent {
     buttonText: presentation?.buttonText ?? "Review Event",
     backgroundImage: presentation?.backgroundImage,
     xpReward: presentation?.xpReward,
+    retryDelayDays: Math.max(
+      1,
+      properties["Retry Delay Days"]?.number ??
+        presentation?.retryDelayDays ??
+        5
+    ),
     readinessRequirements:
       Object.keys(nonZeroMinimums).length > 0 || bonusRequirement > 0
         ? {
@@ -425,6 +435,12 @@ function toCampaignEvent(event: EventQueryResult): CampaignEvent {
         ? persistedStatus
         : "Unknown",
     completedAt: properties["Date Completed"]?.date?.start ?? null,
+    retryAvailableDay:
+      properties["Retry Available Day"]?.number ?? null,
+    retrySlotsUsed: Math.max(
+      0,
+      properties["Retry Slots Used"]?.number ?? 0
+    ),
   };
 }
 
@@ -539,10 +555,11 @@ export async function getActiveCampaignEventState(): Promise<CampaignEventState>
       activePhase.properties["Silver Readiness %"]?.number ?? null,
     goldThresholdPercent:
       activePhase.properties["Gold Readiness %"]?.number ?? null,
-    events: events
-      .map(toCampaignEvent)
-      .filter((event) => event.phaseId === activePhase.id)
-      .sort((a, b) => a.unlockDay - b.unlockDay),
+    events: applyRetrySchedule(
+      events
+        .map(toCampaignEvent)
+        .filter((event) => event.phaseId === activePhase.id)
+    ),
   };
 }
 
@@ -1388,11 +1405,23 @@ export async function isCampaignEventCompleted(eventPage: CampaignEventPage) {
   return eventPage.isCompleted || hasServiceHistoryForEvent(eventPage.id);
 }
 
-export async function markCampaignEventFailed(eventPageId: string) {
+export async function markCampaignEventFailed(
+  eventPageId: string,
+  retryAvailableDay: number | null,
+  retrySlotsUsed: number
+) {
   await getNotionClient().pages.update({
     page_id: eventPageId,
     properties: {
       Status: { select: { name: "Failed" } },
+      "Retry Available Day": { number: retryAvailableDay },
+      ...(retryAvailableDay === null
+        ? {}
+        : {
+            "Retry Slots Used": {
+              number: retrySlotsUsed,
+            },
+          }),
     },
   });
 }
@@ -1544,6 +1573,7 @@ export async function completeCampaignEvent({
           "Date Completed": {
             date: { start: getOperationalDateKey() },
           },
+          "Retry Available Day": { number: null },
         },
       });
     }
