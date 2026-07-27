@@ -33,8 +33,8 @@ The diagram describes current connections, not desired security or persistence b
 ## Route structure
 
 - `src/app/page.tsx` exposes the public login page through `LoginPage`.
-- `src/app/(protected)/layout.tsx` wraps eight protected page routes through `ProtectedLayout`.
-- `src/app/api/**/route.ts` exposes 27 Route Handler files.
+- `src/app/(protected)/layout.tsx` wraps 11 protected page routes through `ProtectedLayout`.
+- `src/app/api/**/route.ts` exposes 28 Route Handler files.
 - `src/app/components` contains shared presentation and interactive components.
 - `src/lib` contains shared Notion, achievement, event, and date logic.
 - `src/data/events.ts` is the repository-owned event catalog.
@@ -175,9 +175,17 @@ Operational inspection and recovery are documented in [`CAMPAIGN_ROLLOVER_RUNBOO
 
 ## Security boundary
 
-Every Route Handler is a public HTTP entry point and must verify authorization independently. The campaign rollover, Individual completion eligibility, Fireteam Assignment, Daily SITREP, Weekly Operations, workout logging, phase-metric, Focus Queue mutation, and academic-quarter handlers use `hasAuthorizedSession`; many older handlers remain unguarded. The current `ProtectedLayout` protects page rendering only. `proxy.disabled.ts` is disabled by filename and would still not replace authorization checks if enabled.
+Every Route Handler is a public HTTP entry point and must verify authorization
+independently. Every current private handler calls `hasAuthorizedSession`; the
+authorization regression suite enumerates the Route Handler tree and fails if a
+private entry point omits that boundary. `/api/login` and `/api/logout` are the
+only public handlers. `ProtectedLayout` protects page rendering only, and
+`proxy.disabled.ts` is disabled by filename; neither substitutes for
+Route Handler authorization.
 
-The current static cookie implementation and unguarded Route Handlers are tracked by [SDCB #192](https://app.notion.com/p/39cbc7d80f45818293afd11fc4c17bae).
+The signed-session and private-handler boundary was implemented under
+[SDCB #192](https://app.notion.com/p/39cbc7d80f45818293afd11fc4c17bae)
+and is recorded in [ADR-0008](adr/0008-signed-single-user-sessions.md).
 
 ## Persistence boundaries
 

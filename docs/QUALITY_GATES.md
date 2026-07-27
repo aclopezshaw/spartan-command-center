@@ -14,10 +14,16 @@ npm run validate:release
 
 The command must complete these checks in order:
 
-1. `npm run test` — every checked-in Node regression suite.
-2. `npm run typecheck` — TypeScript without emitting build artifacts.
-3. `npm run lint:ratchet` — the explicit legacy-lint ceiling.
-4. `npm run build` — the Next.js production build.
+1. `npm run docs:check` — repository-local links in Markdown documentation.
+2. `npm run test` — every checked-in Node regression suite.
+3. `npm run typecheck` — TypeScript without emitting build artifacts.
+4. `npm run lint:ratchet` — the explicit legacy-lint ceiling.
+5. `npm run build` — the Next.js production build.
+
+The documentation check verifies that every repository-local Markdown link in
+the root documentation and `docs/` tree resolves to an existing file or
+directory. External URLs and same-page anchors are deliberately outside this
+local check.
 
 The same command runs for pull requests and pushes to `main` through
 `.github/workflows/quality-gates.yml`.

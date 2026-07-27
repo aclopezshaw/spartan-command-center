@@ -40,6 +40,7 @@ Open [http://localhost:3000](http://localhost:3000).
 Available validation commands:
 
 ```bash
+npm run docs:check
 npm run test
 npm run typecheck
 npm run lint:ratchet
@@ -55,6 +56,7 @@ and [`docs/TECHNICAL_DEBT.md`](docs/TECHNICAL_DEBT.md).
 
 ## Documentation
 
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — repository conventions and end-to-end development workflow.
 - [`docs/README.md`](docs/README.md) — documentation index and status vocabulary.
 - [`docs/PRODUCT_VISION.md`](docs/PRODUCT_VISION.md) — product intent without implementation claims.
 - [`docs/SYSTEM_STATUS.md`](docs/SYSTEM_STATUS.md) — verified implementation matrix.
@@ -62,6 +64,8 @@ and [`docs/TECHNICAL_DEBT.md`](docs/TECHNICAL_DEBT.md).
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — planned, proposed, and deferred direction.
 - [`docs/TECHNICAL_DEBT.md`](docs/TECHNICAL_DEBT.md) — known engineering liabilities.
 - [`docs/QUALITY_GATES.md`](docs/QUALITY_GATES.md) — release validation, regression scope, and lint-ratchet policy.
+- [`docs/NOTION_INTEGRATION.md`](docs/NOTION_INTEGRATION.md) — Notion boundaries, configuration names, read/write flows, and migration workflow.
+- [`docs/NOTION_SCHEMA_CONTRACTS.md`](docs/NOTION_SCHEMA_CONTRACTS.md) — canonical Campaign Operations and Service Record schemas.
 - [`docs/adr/README.md`](docs/adr/README.md) — architecture decision records.
 - [`docs/MIGRATION_NOTES.md`](docs/MIGRATION_NOTES.md) — preserved historical context and migration source.
 
