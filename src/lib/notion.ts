@@ -74,6 +74,11 @@ import {
   buildAchievementServiceHistoryProperties,
   buildCampaignServiceHistoryProperties,
 } from "@/lib/service-history";
+import {
+  buildWeeklyOperationsProperties,
+  getWeeklyServiceRecordIds,
+  WEEKLY_SERVICE_RECORD_PROPERTY,
+} from "@/lib/weekly-operations";
 
 type ServiceHistoryEntry = {
   eventTitle: string;
@@ -3414,10 +3419,38 @@ export async function getCurrentWeeklyOperations(weekStart: string) {
 
 export async function getOrCreateWeeklyOperations(weekStart: string) {
   const existing = await getCurrentWeeklyOperations(weekStart);
-
-  if (existing) return existing;
-
   const notion = getNotionClient();
+  const serviceRecordPageId = await getAlexServiceRecordPageId();
+
+  if (!serviceRecordPageId) {
+    throw new Error("Service Record not found for ALEX-225");
+  }
+
+  if (existing) {
+    const linkedServiceRecordIds = getWeeklyServiceRecordIds(
+      existing as Parameters<typeof getWeeklyServiceRecordIds>[0]
+    );
+
+    if (linkedServiceRecordIds.includes(serviceRecordPageId)) {
+      return existing;
+    }
+
+    if (linkedServiceRecordIds.length > 0) {
+      throw new Error(
+        "Weekly Operations record is linked to an unexpected Service Record"
+      );
+    }
+
+    return notion.pages.update({
+      page_id: existing.id,
+      properties: {
+        [WEEKLY_SERVICE_RECORD_PROPERTY]: {
+          relation: [{ id: serviceRecordPageId }],
+        },
+      },
+    });
+  }
+
   const dataSourceId = getRequiredNotionId(
     "WEEKLY_OPERATIONS_DATABASE_ID"
   );
@@ -3426,23 +3459,11 @@ export async function getOrCreateWeeklyOperations(weekStart: string) {
     parent: {
       data_source_id: dataSourceId,
     },
-    properties: {
-      "Week Start": {
-        date: {
-          start: weekStart,
-        },
-      },
-      Workouts: {
-        checkbox: false,
-      },
-      Shot: {
-        checkbox: false,
-      },
-      Planning: {
-        checkbox: false,
-      },
-    },
-  });
+    properties: buildWeeklyOperationsProperties({
+      weekStart,
+      serviceRecordPageId,
+    }),
+  } as never);
 }
 
 export async function updateWeeklyOperationCheckbox(
@@ -3483,15 +3504,31 @@ export type AcademicQuarterSummary = {
   credits: number;
   startDate: string | null;
   endDate: string | null;
+  courses: Array<{
+    code: string;
+    name: string;
+  }>;
 };
 
 type AcademicQuarterPage = {
+  id: string;
   properties?: {
     Quarter?: { title?: Array<{ plain_text?: string }> };
     Credits?: { number?: number | null };
     "Start Date"?: { date?: { start?: string | null } | null };
     "End Date"?: { date?: { start?: string | null } | null };
     Status?: { select?: { name?: string } | null };
+  };
+};
+
+type AcademicCoursePage = {
+  properties?: {
+    "Course ID"?: {
+      rich_text?: Array<{ plain_text?: string }>;
+    };
+    "Course Name"?: {
+      title?: Array<{ plain_text?: string }>;
+    };
   };
 };
 
@@ -3502,6 +3539,7 @@ type DataSourceSearchResult = {
 };
 
 let academicQuartersDataSourceId: string | null = null;
+let academicCoursesDataSourceId: string | null = null;
 
 async function getAcademicQuartersDataSourceId() {
   if (academicQuartersDataSourceId) {
@@ -3543,10 +3581,97 @@ async function getAcademicQuartersDataSourceId() {
   return exactMatch.id;
 }
 
-function toAcademicQuarterSummary(
-  page: AcademicQuarterPage
-): AcademicQuarterSummary {
+async function getAcademicCoursesDataSourceId(
+  quartersDataSourceId: string
+) {
+  if (academicCoursesDataSourceId) {
+    return academicCoursesDataSourceId;
+  }
+
+  const configuredId =
+    process.env.ACADEMIC_COURSES_DATA_SOURCE_ID;
+
+  if (configuredId) {
+    academicCoursesDataSourceId = configuredId;
+    return configuredId;
+  }
+
+  const quarterDataSource =
+    await getNotionClient().dataSources.retrieve({
+      data_source_id: quartersDataSourceId,
+    });
+  const quarterProperties = (
+    quarterDataSource as unknown as {
+      properties?: Record<
+        string,
+        {
+          name?: string;
+          type?: string;
+          relation?: { data_source_id?: string };
+        }
+      >;
+    }
+  ).properties;
+  const coursesRelation = Object.values(
+    quarterProperties ?? {}
+  ).find(
+    (property) =>
+      property.type === "relation" &&
+      property.name?.toLowerCase().includes("courses")
+  );
+
+  if (
+    coursesRelation?.type !== "relation" ||
+    !coursesRelation.relation?.data_source_id
+  ) {
+    throw new Error(
+      "Academic Courses relation is not configured"
+    );
+  }
+
+  academicCoursesDataSourceId =
+    coursesRelation.relation.data_source_id;
+  return academicCoursesDataSourceId;
+}
+
+async function toAcademicQuarterSummary(
+  page: AcademicQuarterPage,
+  coursesDataSourceId: string | null
+): Promise<AcademicQuarterSummary> {
   const properties = page.properties ?? {};
+  const notion = getNotionClient();
+  const coursePages = coursesDataSourceId
+    ? (
+        await notion.dataSources.query({
+          data_source_id: coursesDataSourceId,
+          filter: {
+            property: "Quarter",
+            relation: {
+              contains: page.id,
+            },
+          },
+          page_size: 100,
+        })
+      ).results
+    : [];
+  const courses = coursePages
+    .map((coursePage) => {
+      const courseProperties = (
+        coursePage as AcademicCoursePage
+      ).properties;
+
+      return {
+        code:
+          courseProperties?.["Course ID"]?.rich_text?.[0]
+            ?.plain_text ?? "",
+        name:
+          courseProperties?.["Course Name"]?.title?.[0]
+            ?.plain_text ?? "Unnamed Course",
+      };
+    })
+    .sort((left, right) =>
+      left.code.localeCompare(right.code)
+    );
 
   return {
     name:
@@ -3555,12 +3680,24 @@ function toAcademicQuarterSummary(
     credits: properties.Credits?.number ?? 0,
     startDate: properties["Start Date"]?.date?.start ?? null,
     endDate: properties["End Date"]?.date?.start ?? null,
+    courses,
   };
 }
 
 export async function getAcademicQuarterOverview() {
   const notion = getNotionClient();
   const dataSourceId = await getAcademicQuartersDataSourceId();
+  let coursesDataSourceId: string | null = null;
+
+  try {
+    coursesDataSourceId =
+      await getAcademicCoursesDataSourceId(dataSourceId);
+  } catch (error) {
+    console.warn(
+      "Academic course relations are unavailable",
+      error
+    );
+  }
   const response = await notion.dataSources.query({
     data_source_id: dataSourceId,
     filter: {
@@ -3592,7 +3729,17 @@ export async function getAcademicQuarterOverview() {
   );
 
   return {
-    active: active ? toAcademicQuarterSummary(active) : null,
-    upNext: upNext ? toAcademicQuarterSummary(upNext) : null,
+    active: active
+      ? await toAcademicQuarterSummary(
+          active,
+          coursesDataSourceId
+        )
+      : null,
+    upNext: upNext
+      ? await toAcademicQuarterSummary(
+          upNext,
+          coursesDataSourceId
+        )
+      : null,
   };
 }

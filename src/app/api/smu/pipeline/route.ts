@@ -6,6 +6,7 @@ import {
 } from "@/lib/date";
 import { getNotionClient } from "@/lib/notion-client";
 import { hasAuthorizedSession } from "@/lib/auth";
+import { getAcademicAssignmentKind } from "@/lib/academic-record";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -187,6 +188,17 @@ export async function GET() {
             const optionalQuarter = courseAssignments.filter(
                 (assignment) => assignment.priority === "Optional"
             );
+            const highPriorityQuarter = courseAssignments.filter(
+                (assignment) => assignment.priority === "High"
+            );
+            const readingQuarter = courseAssignments.filter(
+                (assignment) =>
+                    getAcademicAssignmentKind(assignment.title) === "reading"
+            );
+            const worksheetQuarter = courseAssignments.filter(
+                (assignment) =>
+                    getAcademicAssignmentKind(assignment.title) === "worksheet"
+            );
 
             const weekTotal = thisWeekAssignments.length;
             const weekComplete = thisWeekAssignments.filter((a) =>
@@ -228,6 +240,18 @@ export async function GET() {
                 ).length,
                 quarterOptionalTotal: optionalQuarter.length,
                 quarterOptionalComplete: optionalQuarter.filter(
+                    (assignment) => isComplete(assignment.status)
+                ).length,
+                highPriorityTotal: highPriorityQuarter.length,
+                highPriorityComplete: highPriorityQuarter.filter(
+                    (assignment) => isComplete(assignment.status)
+                ).length,
+                readingTotal: readingQuarter.length,
+                readingComplete: readingQuarter.filter(
+                    (assignment) => isComplete(assignment.status)
+                ).length,
+                worksheetTotal: worksheetQuarter.length,
+                worksheetComplete: worksheetQuarter.filter(
                     (assignment) => isComplete(assignment.status)
                 ).length,
                 overdueCount,

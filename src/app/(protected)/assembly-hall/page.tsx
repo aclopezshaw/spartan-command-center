@@ -6,9 +6,13 @@ import FireteamAssignmentCeremony from "../../components/FireteamAssignmentCerem
 import CampaignRolloverControl from "../../components/CampaignRolloverControl";
 import { getAssemblyHallPresentation } from "@/lib/ceremonial-events";
 import {
+  getAlexServiceRecord,
+  getActiveCampaignEventState,
+  getCampaignPhaseXpSummary,
   getCampaignRolloverStatus,
   getFireteamAssignmentStatus,
 } from "@/lib/notion";
+import { buildRankProgression } from "@/lib/rank-progression";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -38,10 +42,55 @@ function EvidenceItem({
   );
 }
 
+function formulaNumber(
+  properties: Record<
+    string,
+    { formula?: { number?: number | null; string?: string | null } }
+  >,
+  propertyName: string
+) {
+  return properties[propertyName]?.formula?.number ?? 0;
+}
+
 export default async function AssemblyHallPage() {
-  const assignment = await getFireteamAssignmentStatus();
-  const rollover = await getCampaignRolloverStatus();
+  const [assignment, rollover, serviceRecord, phaseXpSummary] =
+    await Promise.all([
+      getFireteamAssignmentStatus(),
+      getCampaignRolloverStatus(),
+      getAlexServiceRecord(),
+      getActiveCampaignEventState().then((eventState) =>
+        getCampaignPhaseXpSummary(eventState)
+      ),
+    ]);
   const eligibility = assignment.eligibility;
+  const averageDailyHabitXp =
+    phaseXpSummary && phaseXpSummary.elapsedDays > 0
+      ? phaseXpSummary.dailyXp / phaseXpSummary.elapsedDays
+      : null;
+  const serviceProperties =
+    serviceRecord && "properties" in serviceRecord
+      ? (serviceRecord.properties as Record<
+          string,
+          {
+            formula?: {
+              number?: number | null;
+              string?: string | null;
+            };
+          }
+        >)
+      : null;
+  const rankProgression = serviceProperties
+    ? buildRankProgression({
+        currentRank:
+          serviceProperties["Calculated Rank"]?.formula?.string ?? "Recruit",
+        currentXp: formulaNumber(serviceProperties, "Service Score"),
+        nextRankXp: formulaNumber(serviceProperties, "Next Rank XP"),
+        xpToNextRank: formulaNumber(serviceProperties, "XP To Next Rank"),
+        rankProgress:
+          serviceProperties["Rank Progress %"]?.formula?.number ?? null,
+        averageDailyHabitXp,
+      })
+    : null;
   const presentation = getAssemblyHallPresentation(
     eligibility.state,
     assignment.state
@@ -226,6 +275,149 @@ export default async function AssemblyHallPage() {
               <div className="pointer-events-none absolute inset-4 border border-cyan-400/15" />
               <div className="pointer-events-none absolute inset-0 shadow-[inset_0_0_90px_rgba(8,145,178,0.22)]" />
             </div>
+          </div>
+
+          <div className="mt-5 border border-cyan-800/70 bg-[linear-gradient(135deg,rgba(2,6,23,0.96),rgba(0,0,0,0.92))] p-5 shadow-[0_0_24px_rgba(8,145,178,0.12)] sm:p-6">
+            <div className="flex flex-col justify-between gap-4 border-b border-cyan-900/70 pb-5 sm:flex-row sm:items-start">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.32em] text-cyan-400">
+                  Personnel Advancement
+                </p>
+                <h2 className="mt-2 text-xl font-black uppercase tracking-tight text-white sm:text-2xl">
+                  Promotion Readiness
+                </h2>
+              </div>
+
+              <div className="border-l-2 border-amber-400/70 pl-4 sm:text-right">
+                <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                  Board Recommendation
+                </p>
+                <p
+                  className={`mt-1 text-sm font-black uppercase tracking-[0.15em] ${
+                    rankProgression?.thresholdMet
+                      ? "text-emerald-300"
+                      : "text-amber-200"
+                  }`}
+                >
+                  {rankProgression?.terminalRank
+                    ? "Service Apex Reached"
+                    : rankProgression?.thresholdMet
+                      ? "Threshold Met · Review Pending"
+                      : "Hold · Criteria Not Met"}
+                </p>
+              </div>
+            </div>
+
+            {rankProgression ? (
+              <div className="mt-5 grid gap-6 lg:grid-cols-[1.55fr_0.8fr]">
+                <div>
+                  <div className="flex flex-wrap items-end justify-between gap-4">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                        Current Rank
+                      </p>
+                      <p className="mt-1 text-xl font-black uppercase text-white">
+                        {rankProgression.currentRank}
+                      </p>
+                    </div>
+                    <div className="text-left sm:text-right">
+                      <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                        Promotion Target
+                      </p>
+                      <p className="mt-1 text-xl font-black uppercase text-amber-500">
+                        {rankProgression.nextRank ?? "None"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5">
+                    <div className="mb-2 flex justify-between gap-4 text-[10px] uppercase tracking-[0.16em]">
+                      <span className="text-slate-500">Rank Progress</span>
+                      <span className="font-bold text-cyan-200">
+                        {rankProgression.progressPercent.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="h-3 overflow-hidden border border-cyan-900/80 bg-black">
+                      <div
+                        className="h-full bg-[linear-gradient(90deg,#0e7490,#67e8f9)] shadow-[0_0_14px_rgba(34,211,238,0.5)]"
+                        style={{
+                          width: `${rankProgression.progressPercent}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    {[
+                      ["Current XP", rankProgression.currentXp],
+                      ["Required XP", rankProgression.nextRankXp],
+                      ["XP Remaining", rankProgression.xpToNextRank],
+                      ["Est. Days", rankProgression.estimatedDays],
+                    ].map(([label, value]) => (
+                      <div
+                        key={label}
+                        className="border border-cyan-900/60 bg-black/45 px-3 py-3"
+                      >
+                        <p className="text-[9px] uppercase tracking-[0.18em] text-slate-500">
+                          {label}
+                        </p>
+                        <p className="mt-2 text-lg font-black text-slate-100">
+                          {value === null
+                            ? "—"
+                            : Number(value).toLocaleString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {!rankProgression.terminalRank && (
+                    <p className="mt-3 text-[10px] leading-5 text-slate-500">
+                      {rankProgression.averageDailyHabitXp === null
+                        ? "A days-to-threshold forecast will appear after the current phase records Daily SITREP habit XP."
+                        : `Estimated from the current phase average of ${rankProgression.averageDailyHabitXp.toFixed(1)} Daily SITREP habit XP per operational day.`}{" "}
+                      This is a forecast, not a guaranteed ceremony date.
+                    </p>
+                  )}
+                </div>
+
+                <aside className="border border-cyan-900/60 bg-black/45 p-4">
+                  <p className="text-[10px] uppercase tracking-[0.25em] text-cyan-400">
+                    Rank-Up Criteria
+                  </p>
+                  <div className="mt-4 space-y-3 text-[11px] uppercase tracking-[0.12em]">
+                    <div className="flex items-center justify-between gap-4 border-b border-cyan-950 pb-3">
+                      <span className="text-slate-400">XP Threshold</span>
+                      <span
+                        className={
+                          rankProgression.thresholdMet
+                            ? "text-emerald-300"
+                            : "text-amber-200"
+                        }
+                      >
+                        {rankProgression.thresholdMet ? "Met" : "Pending"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 border-b border-cyan-950 pb-3">
+                      <span className="text-slate-400">Promotion Review</span>
+                      <span className="text-slate-500">Not Issued</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-slate-400">Ceremonial Order</span>
+                      <span className="text-slate-500">Awaiting Eligibility</span>
+                    </div>
+                  </div>
+                  <p className="mt-5 text-[10px] leading-5 text-slate-500">
+                    The Assembly Hall will issue the formal promotion order only
+                    after the authoritative promotion review is connected.
+                  </p>
+                </aside>
+              </div>
+            ) : (
+              <p className="mt-5 text-xs uppercase tracking-[0.16em] text-slate-500">
+                Service Record unavailable. Promotion readiness cannot be
+                calculated.
+              </p>
+            )}
           </div>
 
           <div className="mt-5 grid gap-4 md:grid-cols-[1fr_2fr]">

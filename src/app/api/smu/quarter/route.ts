@@ -20,7 +20,13 @@ export async function GET() {
     console.error("Failed to load academic quarters", error);
 
     return NextResponse.json(
-      { error: "Unable to load academic quarters" },
+      {
+        error:
+          process.env.NODE_ENV === "development" &&
+          error instanceof Error
+            ? error.message
+            : "Unable to load academic quarters",
+      },
       { status: 500 }
     );
   }

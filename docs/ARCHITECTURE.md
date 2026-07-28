@@ -69,6 +69,29 @@ Notion client construction is centralized:
 
 Schema mapping, pagination, and error translation remain distributed technical debt. Authorization is centralized through `src/lib/auth.ts`, and every private Route Handler verifies the signed session before reading or mutating Notion.
 
+Intel Report submission uses the shared absolute-ending-page contract in
+`src/lib/intel-report.ts`. `POST /api/intel-reports` verifies the selected page
+belongs to the configured Archive data source, derives the book title and page
+delta from that authoritative record, and validates the ending page against
+Current Page and Total Pages. Reading Reports use a deterministic
+Book-plus-ending-page title: a retry can detect a report created before an
+interrupted Archive update and finish the update without adding another normal
+report. This is application-level reconciliation rather than a transactional or
+distributed uniqueness guarantee; the limitation remains governed by
+[ADR-0001](adr/0001-notion-as-operational-data-store.md).
+
+Intel material reads use the shared selection contract in
+`src/lib/archive-materials.ts`. `GET /api/intel-books` follows every Notion
+pagination cursor before partitioning records: Active titles feed Active
+Materials, while Low Priority, Medium Priority, High Priority, and Wishlist
+titles are recommendation-eligible. The server sorts eligible records by
+descending Fit Score with a title tie-break, then returns the deduplicated union
+of every eligible Priority Band record and at most five highest-Fit-Score
+records. Complete and Active titles cannot appear in the recommendation result.
+The same route follows every Reading Reports cursor and reduces Book relations to
+their latest Date. Active Material cards receive that nullable timestamp and
+re-fetch it together with Archive progress after a successful report.
+
 ## Authentication and authorization
 
 [ADR-0008](adr/0008-signed-single-user-sessions.md) records the current single-user session boundary.

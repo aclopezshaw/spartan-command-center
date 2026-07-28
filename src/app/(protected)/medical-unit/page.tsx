@@ -2,6 +2,10 @@
 
 import { formatDueDate } from "../../../lib/date";
 import { useEffect, useState } from "react";
+import {
+    buildAcademicRecordSummary,
+    formatAcademicCount,
+} from "@/lib/academic-record";
 import NavBar from "../../components/NavBar";
 import PageHeader from "../../components/PageHeader";
 
@@ -39,6 +43,12 @@ type PipelineCourse = {
     quarterRequiredComplete: number;
     quarterOptionalTotal: number;
     quarterOptionalComplete: number;
+    highPriorityTotal: number;
+    highPriorityComplete: number;
+    readingTotal: number;
+    readingComplete: number;
+    worksheetTotal: number;
+    worksheetComplete: number;
     overdueCount: number;
     skippedCount: number;
     nextExam: string | null;
@@ -57,6 +67,10 @@ type QuarterSummary = {
     credits: number;
     startDate: string | null;
     endDate: string | null;
+    courses: Array<{
+        code: string;
+        name: string;
+    }>;
 };
 
 type QuarterResponse = {
@@ -301,6 +315,27 @@ function StatBlock({ label, value }: { label: string; value: string }) {
     );
 }
 
+function RecordStat({
+    label,
+    value,
+    last = false,
+}: {
+    label: string;
+    value: React.ReactNode;
+    last?: boolean;
+}) {
+    return (
+        <div
+            className={`flex justify-between gap-4 ${
+                last ? "" : "border-b border-cyan-900/60 pb-2"
+            }`}
+        >
+            <span className="text-slate-500">{label}</span>
+            <span className="shrink-0 text-right text-cyan-100">{value}</span>
+        </div>
+    );
+}
+
 function getPriorityColor(priority: string) {
     switch (priority.toLowerCase()) {
         case "high":
@@ -327,6 +362,7 @@ export default function MedicalUnitPage() {
     const [focusError, setFocusError] = useState<string | null>(null);
     const [quarter, setQuarter] = useState<QuarterSummary | null>(null);
     const [nextQuarter, setNextQuarter] = useState<QuarterSummary | null>(null);
+    const [pipelineLoaded, setPipelineLoaded] = useState(false);
 
     async function loadOrders() {
         const response = await fetch("/api/smu/orders");
@@ -335,26 +371,45 @@ export default function MedicalUnitPage() {
     }
 
     async function loadPipeline() {
-        const response = await fetch("/api/smu/pipeline", {
-            cache: "no-store",
-        });
+        try {
+            const response = await fetch("/api/smu/pipeline", {
+                cache: "no-store",
+            });
 
-        const data: PipelineResponse = await response.json();
-        setPipeline(data.pipeline);
+            if (!response.ok) {
+                throw new Error("Unable to load academic assignments");
+            }
+
+            const data: PipelineResponse = await response.json();
+            setPipeline(data.pipeline ?? []);
+            setPipelineLoaded(true);
+        } catch {
+            setPipeline([]);
+            setPipelineLoaded(false);
+        }
     }
 
     async function loadQuarter() {
-        const response = await fetch("/api/smu/quarter", {
-            cache: "no-store",
-        });
+        try {
+            const response = await fetch("/api/smu/quarter", {
+                cache: "no-store",
+            });
 
-        if (!response.ok) {
-            return;
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(
+                    errorData.error ?? "Unable to load academic quarter"
+                );
+            }
+
+            const data: QuarterResponse = await response.json();
+            setQuarter(data.active);
+            setNextQuarter(data.upNext);
+        } catch (error) {
+            console.error("Unable to load academic quarter", error);
+            setQuarter(null);
+            setNextQuarter(null);
         }
-
-        const data: QuarterResponse = await response.json();
-        setQuarter(data.active);
-        setNextQuarter(data.upNext);
     }
 
     useEffect(() => {
@@ -409,8 +464,10 @@ export default function MedicalUnitPage() {
         (total, course) => total + course.weekMinutes,
         0
     );
-    const priorityTarget = orders.focusQueue[0] ?? null;
-
+    const academicRecord = buildAcademicRecordSummary({
+        courses: pipeline,
+        assignmentsLoaded: pipelineLoaded,
+    });
     return (
         <main className="h-screen overflow-y-auto bg-black p-6 font-mono text-slate-100 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="mx-auto max-w-6xl space-y-6">
@@ -670,20 +727,6 @@ export default function MedicalUnitPage() {
                                 </div>
                             </Panel>
 
-                            <Panel title="SMU Recommendation">
-                                <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
-                                    Priority Target
-                                </p>
-                                <p className="mt-2 text-2xl font-bold text-amber-400">
-                                    {priorityTarget?.course ?? "No Priority Target"}
-                                </p>
-                                <p className="mt-4 text-sm leading-relaxed text-slate-400">
-                                    {priorityTarget
-                                        ? `${orders.focusQueue.length} focused assignment${orders.focusQueue.length === 1 ? "" : "s"} currently require attention.`
-                                        : "No assignments are currently in the Focus Queue."}
-                                </p>
-                            </Panel>
-
                             <Panel title="Upcoming Clinical Ops">
                                 <p className="text-sm text-slate-400">
                                     No authoritative clinical operations source is
@@ -693,24 +736,46 @@ export default function MedicalUnitPage() {
 
                             <Panel title="Medical Service Record">
                                 <div className="grid gap-3 text-sm">
-                                    <div className="flex justify-between border-b border-cyan-900/60 pb-2">
-                                        <span className="text-slate-500">
-                                            Assignments Completed
-                                        </span>
-                                        <span className="text-cyan-100">187</span>
-                                    </div>
-                                    <div className="flex justify-between border-b border-cyan-900/60 pb-2">
-                                        <span className="text-slate-500">
-                                            Study Streak
-                                        </span>
-                                        <span className="text-cyan-100">8 Days</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-slate-500">
-                                            Clinical Hours
-                                        </span>
-                                        <span className="text-cyan-100">68</span>
-                                    </div>
+                                    <RecordStat
+                                        label="Assignments Completed"
+                                        value={
+                                            formatAcademicCount(
+                                                academicRecord.completedAssignments,
+                                                academicRecord.totalAssignments
+                                            )
+                                        }
+                                    />
+                                    <RecordStat
+                                        label="Required Completed"
+                                        value={
+                                            formatAcademicCount(
+                                                academicRecord.completedRequiredAssignments,
+                                                academicRecord.totalRequiredAssignments
+                                            )
+                                        }
+                                    />
+                                    <RecordStat
+                                        label="Readings Completed"
+                                        value={formatAcademicCount(
+                                            academicRecord.completedReadings,
+                                            academicRecord.totalReadings
+                                        )}
+                                    />
+                                    <RecordStat
+                                        label="Worksheets Completed"
+                                        value={formatAcademicCount(
+                                            academicRecord.completedWorksheets,
+                                            academicRecord.totalWorksheets
+                                        )}
+                                    />
+                                    <RecordStat
+                                        label="High Priority Completed"
+                                        value={formatAcademicCount(
+                                            academicRecord.completedHighPriorityAssignments,
+                                            academicRecord.totalHighPriorityAssignments
+                                        )}
+                                        last
+                                    />
                                 </div>
                             </Panel>
 
@@ -728,9 +793,27 @@ export default function MedicalUnitPage() {
                                         ? `${nextQuarter.credits} credits planned for the upcoming quarter.`
                                         : "No upcoming quarter is marked in Notion."}
                                 </p>
-                                <p className="mt-3 text-xs uppercase tracking-[0.18em] text-slate-500">
-                                    Course list not connected
-                                </p>
+                                {nextQuarter?.courses.length ? (
+                                    <div className="mt-4 space-y-2 border-t border-cyan-900/60 pt-4">
+                                        {nextQuarter.courses.map((course) => (
+                                            <div
+                                                key={course.code || course.name}
+                                                className="flex items-baseline justify-between gap-4 text-sm"
+                                            >
+                                                <span className="font-bold text-cyan-200">
+                                                    {course.code}
+                                                </span>
+                                                <span className="text-right text-slate-400">
+                                                    {course.name}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="mt-3 text-xs uppercase tracking-[0.18em] text-slate-500">
+                                        No courses assigned
+                                    </p>
+                                )}
                             </Panel>
                         </div>
                     </div>

@@ -75,7 +75,7 @@ function ProgressBar({
     const boundedValue = Math.min(100, Math.max(0, value));
 
     return (
-        <>
+        <div className={markers.length > 0 ? "relative pb-6" : undefined}>
             <div className="relative h-3 w-full overflow-hidden rounded-sm border border-cyan-700/50 bg-slate-800">
                 <div
                     className={`h-full ${barClassName}`}
@@ -98,19 +98,23 @@ function ProgressBar({
                     );
                 })}
             </div>
-            {markers.length > 0 && (
-                <div className="mt-2 flex flex-wrap justify-end gap-x-4 gap-y-1 text-[10px] uppercase tracking-[0.16em]">
-                    {markers.map((marker) => (
-                        <span
-                            key={`${marker.label}-legend`}
-                            className={marker.textClassName}
-                        >
-                            {marker.label} · {marker.xp} XP
-                        </span>
-                    ))}
-                </div>
-            )}
-        </>
+            {markers.map((marker) => {
+                const boundedMarkerValue = Math.min(
+                    100,
+                    Math.max(0, marker.value)
+                );
+
+                return (
+                    <span
+                        key={`${marker.label}-value`}
+                        className={`absolute top-5 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold tracking-[0.12em] ${marker.textClassName}`}
+                        style={{ left: `${boundedMarkerValue}%` }}
+                    >
+                        {marker.xp} xp
+                    </span>
+                );
+            })}
+        </div>
     );
 }
 
