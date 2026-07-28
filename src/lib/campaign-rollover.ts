@@ -44,8 +44,19 @@ function isDurablyComplete(event: RolloverEvent) {
 function getTransitionState(
   source: RolloverPhase,
   target: RolloverPhase,
-  historyExists: boolean
+  historyRecordCount: number
 ): Pick<RolloverEvaluation, "state" | "eligible" | "reasons"> {
+  if (historyRecordCount > 1) {
+    return {
+      state: "blocked",
+      eligible: false,
+      reasons: [
+        `Multiple Campaign Service History records exist for ${source.phaseName}.`,
+      ],
+    };
+  }
+
+  const historyExists = historyRecordCount === 1;
   const sourcePhaseComplete = source.phaseStatus === "Complete";
   const targetPhaseActive = target.phaseStatus === "Active";
 
@@ -113,12 +124,12 @@ export function evaluateRollover({
   phases,
   events,
   operationalDate,
-  historyExists,
+  historyRecordCount,
 }: {
   phases: RolloverPhase[];
   events: RolloverEvent[];
   operationalDate: string;
-  historyExists: boolean;
+  historyRecordCount: number;
 }): RolloverEvaluation {
   const transition = selectRolloverTransition(phases, operationalDate);
 
@@ -155,7 +166,7 @@ export function evaluateRollover({
   const transitionState = getTransitionState(
     transition.source,
     transition.target,
-    historyExists
+    historyRecordCount
   );
   reasons.push(...transitionState.reasons);
 

@@ -114,10 +114,11 @@ database ID, keeping both Intel routes on the same Notion API contract.
 
 1. `CommandHudPage` reads the current SITREP through `getTodaySitrep`.
 2. `HudCheckbox.toggle` sends `propertyName` and `checked` to `/api/sitrep-checkbox`.
-3. The Route Handler calls `updateDailySitrepCheckbox`.
-4. Checked objectives trigger `evaluateAchievements`.
-5. After the source checkbox persists, `updateDailySitrepCheckbox` reconciles the source-derived Unit Cohesion operation when permanent Fireteam assignment is complete and the record is assignment-date eligible.
-6. The client calls `router.refresh()` without verifying `response.ok`.
+3. The Route Handler calls `updateDailySitrepCheckbox`, which persists the source checkbox and reconciles the source-derived Unit Cohesion operation when permanent Fireteam assignment is complete and the record is assignment-date eligible.
+4. For a checked objective, the handler registers `scheduleAchievementEvaluation` with Next.js `after()` and returns the successful save response without waiting for achievement work. Daily SITREP, Weekly Operations, and mobile objective routes share this contract and expose `achievementEvaluation: "scheduled"` while preserving an empty `awarded` array for response compatibility.
+5. The post-response callback runs for up to the route's configured 60-second duration. A module-level single-flight coordinator coalesces overlapping requests in the same server process, logs failures without changing the already-durable habit mutation, and releases after success or failure so a later request can recover.
+6. `evaluateAchievements` uses `collectNotionPages` to follow every `has_more` / `next_cursor` response for earned and unearned definitions plus daily or weekly completion evidence. After dating a newly earned definition, it re-reads the formula-derived readiness award and reconciles one relation-backed Service History ledger row with a stable readiness operation ID. Every evaluation also repairs an earned achievement whose prior history write was interrupted; duplicate histories block reconciliation.
+7. The client receives the save response, clears its `Saving...` state, and refreshes server data. Achievement presentation can therefore appear on the next refresh without delaying checkbox feedback.
 
 ### Hydration update
 
@@ -141,7 +142,7 @@ Daily record selection and hydration aggregation now share the America/Denver op
 1. `getActiveCampaignEventState` loads Event records from Notion, resolves their related Campaign Operations phase records, and returns the active campaign name, phase name, next phase name, phase length, schedule, and authoritative campaign day. Event records without a legacy `Event ID` use their stable Notion page ID for application identity, while completion is derived directly from the resolved record and linked history.
 2. `EventSystem` loads that server-derived state from `/api/events/status`. `getEventOutcomeState` distinguishes upcoming, active, past-due incomplete, failed cooldown, retry-ready, terminal failed, and completed outcomes from the authoritative campaign day plus persisted Event fields.
 3. Authenticated `/api/complete-event` accepts only an event identifier; it rejects events outside the active phase, events before their scheduled campaign day, and later events while an earlier one is unresolved. The exact Notion page ID resolved from the active phase is retrieved before any legacy Event ID lookup, preventing a stale same-ID row from replacing the active record.
-4. Before readiness evaluation, the Route Handler enforces the Event's persisted `Retry Available Day`. An unsuccessful review writes `Failed` and attempts to consume the next Notion-owned five-day retry slot. `Retry Slots Used` shifts the failed Event and every later Event together, so a retry is authorized only when the complete remaining schedule still fits inside the phase. Without that reserve capacity, the retry day is persisted as null and the result is terminal.
+4. Before readiness evaluation, the Route Handler enforces the Event's persisted `Retry Available Day`. The review UI and Route Handler consume the same typed requirements resolved from the active phase's Notion Event row. `evaluateEventReadiness` returns category-specific minimum failures and an optional at-least-one failure with the observed score evidence. An unsuccessful review returns that structured evaluation, writes `Failed`, and attempts to consume the next Notion-owned five-day retry slot without creating completion history, XP, standings, or phase progress. `Retry Slots Used` shifts the failed Event and every later Event together, so a retry is authorized only when the complete remaining schedule still fits inside the phase. Without that reserve capacity, the retry day is persisted as null and the result is terminal.
 5. On Phase II success, the server snapshots readiness and persists one deterministic Fireteam Standings resolution before reconciling exactly one XP-bearing Event Service History record and finally writing the Event record as `Defeated` with a Denver date key.
 6. Standings preserve Epsilon's readiness-earned score, assign the four remaining unique values through seeded weighted rival ordering, persist cumulative totals and wins, and rank cumulative ties by wins then final-major placement. The seed and arithmetic remain server-side.
 7. Event and standings writes use exact-record recovery and in-process concurrency coalescing. Retries return or repair the persisted resolution; duplicate records surface as conflicts instead of rerolling.
@@ -155,7 +156,7 @@ Daily record selection and hydration aggregation now share the America/Denver op
 3. Authenticated `POST /api/campaign/rollover` is the explicit mutation boundary. HUD and page reads do not cause rollover writes.
 4. Before changing phase status, the operation calculates exact phase-scoped Daily SITREP, Weekly Operations, and linked Service History event XP. It expands the phase's per-day and per-week objective pools across its length, calculates thresholds from maximum habit XP plus mandatory event XP, and writes a versioned immutable result to the outgoing Campaign Operations row.
 5. A missing or duplicate linked event-history record blocks the snapshot. Once `Phase Finalized At` exists, retries read and verify the existing snapshot rather than recalculating or overwriting it.
-6. The operation then reconciles an exact phase-completion Campaign history record, writes the outgoing phase Complete, writes the incoming phase Active, and re-reads the authoritative records.
+6. The operation then reconciles exactly one phase-completion Campaign history record, blocks duplicate transition histories, writes the outgoing phase Complete, writes the incoming phase Active, and re-reads the authoritative records.
 7. After rollover verifies, it persists and verifies the Service Record's Individual completion eligibility. Retries resume snapshot-only, history-only, source-only, target-only, or eligibility-only partial states.
 8. A module-level promise coalesces concurrent requests in one server process; cross-process exclusivity remains constrained by Notion's lack of transactions and unique constraints.
 
@@ -172,15 +173,31 @@ Operational inspection and recovery are documented in [`CAMPAIGN_ROLLOVER_RUNBOO
 
 ### Ceremonial events and the Assembly Hall
 
-1. `getCeremonialEvent` in `src/lib/ceremonial-events.ts` translates authoritative progression and assignment states into a presentation-only Personnel Command order. The Fireteam Assignment order appears at `ready_to_finalize` or `eligible`, remains visible through an interrupted or partially finalized assignment, and is dismissed only after completion verifies.
-2. A Ceremonial Event is not a Campaign Event. Its contract explicitly carries zero XP, readiness, and standings rewards and routes to `/assembly-hall`; later promotion, medal, command-assignment, specialization, and graduation eligibility may use the same order shape.
-3. `CommandHudPage` evaluates Individual completion on the server and passes any resulting order to `EventSystem`. A due Campaign Event retains priority; otherwise the ceremonial order occupies the same right-side event presentation slot and links directly to the hall.
+1. `getCeremonialEvent` and `getPromotionCeremonialEvent` in `src/lib/ceremonial-events.ts` translate authoritative assignment or promotion states into presentation-only Personnel Command orders. Fireteam Assignment and Promotion orders remain visible through interrupted history finalization; a Promotion order first appears when the durable awarded rank is below an XP-earned conventional threshold.
+2. A Ceremonial Event is not a Campaign Event. Its contract explicitly carries zero XP, readiness, and standings rewards and routes to `/assembly-hall`; later medal, command-assignment, specialization, and graduation eligibility may use the same order shape.
+3. `CommandHudPage` evaluates Fireteam Assignment and Promotion status on the server and passes the highest-priority resulting order to `EventSystem`. A due Campaign Event retains presentation priority; otherwise the ceremonial order occupies the same right-side event slot and links directly to the hall.
 4. `/assembly-hall` is a dynamic Server Component that renders the permanent location from live eligibility and assignment evidence. `FireteamAssignmentCeremony` begins the ceremony, advances four monotonic persisted presentation steps, accepts the assignment, presents recovery when finalization is incomplete, and offers a read-only replay after completion.
 5. Beginning the ceremony is an explicit mutation. It freezes and verifies the Phase I XP/medal snapshot when eligibility is `ready_to_finalize`, reconciles eligibility to `eligible`, and then writes `In Progress`; ordinary reads never freeze XP.
 6. The authenticated `/api/progression/fireteam-assignment` Route Handler accepts only `begin`, `progress`, or `complete`. The server owns Fireteam Epsilon's ID, name, motto, five stable member IDs, assignment version, operation ID, roster snapshot, and initial `Acquaintance I` teammate baselines; the client cannot submit or reroll identity.
 7. Completion first writes the canonical assignment to ALEX-225's Service Record with status `Finalizing` and progression stage `Fireteam Member`, then finds or creates the exact zero-reward `Assignment` Service History record, requires exactly one matching record, and finally marks the assignment `Complete`. A retry resumes from the persisted step or reconciles the canonical finalizing snapshot rather than creating a second identity.
 8. `/fireteam` is always routable but keeps identity and dossiers restricted until assignment state is `completed`. The completed surface reads the same canonical contract used by the ceremony.
 9. `/promotion-board` permanently redirects to the canonical Assembly Hall route, and primary navigation uses the new name.
+10. `getPromotionStatus` resolves the Rank Progression data source through the Service Record's `Current Rank` relation, treats that relation as the awarded-rank authority, and validates both current and target records against the repository-owned Recruit-through-Diamond-VI contract. The `Calculated Rank` formula does not prove ceremony completion.
+11. Authenticated `GET /api/progression/promotion` is read-only. It also verifies the exact prior-to-current Promotion history for every awarded conventional rank above Recruit. A missing row produces recoverable `finalizing`; duplicates or malformed evidence produce `conflict`.
+12. `POST` requires the exact prior/current rank page IDs from a recovery order or current/target IDs from a new order, rechecks XP eligibility, advances at most one rank relation, and reconciles exactly one zero-reward `Promotion` Service History row linked to ALEX-225. The title and description preserve both ranks and the row date is the durable ceremony-completion date. The HUD summons clears only after both records verify; stale orders block and exact retries return the existing transition.
+13. A keyed module-level promise coalesces identical in-process promotion requests. Notion still cannot enforce a distributed unique constraint, so duplicate history evidence blocks further progression for explicit reconciliation.
+
+Daily SITREP and Weekly Operations rows remain operational evidence rather than
+player-facing Service History entries. Their record-worthy milestones enter the
+permanent timeline through the exact Achievement history contract; this avoids
+duplicating habit XP or flooding the timeline with ordinary checkbox activity.
+`SERVICE_HISTORY_FILTERS`, `parseServiceHistoryFilter`, and
+`matchesServiceHistoryFilter` in `src/lib/service-history-view.ts` own the
+player-facing timeline classification. The server-rendered page derives filter
+counts from the complete paginated result and uses URL-backed filters for
+Campaigns, Events, Achievements, Promotions, Assignments, Readiness, and Other
+Records. Unknown future entry types remain visible under Other Records rather
+than being dropped.
 
 ### Unit Cohesion relationship progression
 
@@ -225,6 +242,8 @@ and is recorded in [ADR-0008](adr/0008-signed-single-user-sessions.md).
 | Campaign phase rollover | Versioned final XP/medal snapshot and phase states on Notion Campaign Operations, plus one linked Service History Campaign record |
 | Individual completion eligibility | Versioned eligibility status, source phase, evidence explanation, evaluation date, and completion date on ALEX-225's Notion Service Record |
 | Fireteam assignment | Versioned canonical identity, operation ID, ceremony step, assignment date, roster/relationship baseline snapshot, and completion state on ALEX-225's Notion Service Record, plus one matching zero-reward Assignment Service History record |
+| Readiness attribution | Achievement rollups remain the current-total authority. One zero-XP Achievement Service History row per readiness-awarding achievement stores signed delta, stable operation ID, source type/ID, category, date, reason, and source relations; the ledger must reconcile exactly to the rollups. |
+| Readiness trends | Service Record compares each category's signed ledger points from the current rolling seven operational days with the immediately preceding seven days. Higher recent velocity is `up`, equal velocity is `flat`, and lower recent velocity is `down`; cumulative readiness remains unchanged. |
 | Unit Cohesion | Source-derived, zero-XP `System` rows in Notion Service History store active/reversed habit contributions; current per-member level and progress are reproducibly derived from those auditable rows |
 | Mobile hydration | Server-process memory |
 | Mobile intel reports | Not persisted |

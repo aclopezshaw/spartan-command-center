@@ -18,11 +18,9 @@ This file records durable engineering liabilities. It does not duplicate live ti
 
 | Debt | Evidence | Tracking |
 | --- | --- | --- |
-| Achievement evaluation does not paginate | `getUnearnedAchievements` and `getDailyCheckboxStats` in `src/lib/achievements.ts` | [SDCB #195](https://app.notion.com/p/39cbc7d80f4581d5a2acc064481cfe19) |
 | Week-start conventions differ by domain | Weekly Operations explicitly uses Sunday while the academic pipeline explicitly uses Monday through `getOperationalWeekRange` | America/Denver calculation is centralized by accepted [ADR-0003](adr/0003-denver-operational-time.md), but one universal week-start convention remains unapproved. |
 | Event completion is split between Notion and browser storage | `EventSystem` records local completion before a best-effort event `POST`; backend failure leaves history, rewards, and cross-device state unsynchronized. | [SDCB #187](https://app.notion.com/p/399bc7d80f4581759845cbb71b982953) tracks the backend completion failure; the local-first behavior is an interim fallback. |
 | Missing event assets | `eventCatalog` references `candidate-inspection.png` and `final-field-training-exercise.png`; neither exists under `public/images/events` | No verified ticket mapping in Phase 1. |
-| Service Record mixes authoritative and derived values | `Home` in `src/app/(protected)/service-record/page.tsx` overwrites Notion readiness with unpaginated achievement totals | No verified ticket mapping in Phase 1. |
 | Arbitrary property/page mutation inputs | SITREP and Weekly Operations `POST` handlers accept client-supplied property names and page IDs | Covered partly by SDCB #192; payload allowlists remain required. |
 
 ## Maintainability debt

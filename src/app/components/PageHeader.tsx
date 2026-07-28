@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { getRankInsigniaPath } from "@/lib/rank-insignia";
 
 export default function PageHeader({
   eyebrow,
@@ -23,7 +24,7 @@ export default function PageHeader({
         <div className="relative grid h-[90px] w-[78px] place-items-center sm:h-[108px] sm:w-[92px]">
           <div className="absolute inset-2 rounded-full bg-cyan-400/20 blur-xl" />
           <Image
-            src="/images/ranks/recruit.png"
+            src={getRankInsigniaPath("Recruit")}
             alt="Recruit rank insignia"
             width={88}
             height={88}

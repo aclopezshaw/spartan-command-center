@@ -3,10 +3,12 @@ import {
   getCurrentWeeklyOperations,
   updateWeeklyOperationCheckbox,
 } from "@/lib/notion";
-import { evaluateAchievements } from "@/lib/achievements";
+import { scheduleAchievementEvaluation } from "@/lib/achievement-evaluation";
 import { hasAuthorizedSession } from "@/lib/auth";
 import { getOperationalWeekRange } from "@/lib/date";
 import { getUnitCohesionHabit } from "@/lib/unit-cohesion";
+
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   if (!(await hasAuthorizedSession())) {
@@ -40,7 +42,15 @@ export async function POST(request: Request) {
 
   await updateWeeklyOperationCheckbox(pageId, propertyName, checked);
 
-  const awarded = checked ? await evaluateAchievements() : [];
+  if (checked) {
+    scheduleAchievementEvaluation();
+  }
 
-  return NextResponse.json({ ok: true, awarded });
+  return NextResponse.json({
+    ok: true,
+    awarded: [],
+    achievementEvaluation: checked
+      ? "scheduled"
+      : "not_requested",
+  });
 }

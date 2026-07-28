@@ -10,13 +10,19 @@ import {
   type ObjectiveStats,
 } from "@/lib/achievement-rules";
 import {
-  createAchievementServiceHistoryEntry,
-  hasServiceHistoryForAchievement,
+  ensureAchievementServiceHistoryEntry,
+  getAchievementReadinessHistoryIndex,
 } from "@/lib/notion";
 import {
   getNotionClient,
   getRequiredNotionId,
 } from "@/lib/notion-client";
+import { collectNotionPages } from "@/lib/notion-pagination";
+import {
+  getAchievementReadinessOperationId,
+  isReadinessCategory,
+  type ReadinessCategory,
+} from "@/lib/readiness-ledger";
 
 type Achievement = {
   id: string;
@@ -25,7 +31,8 @@ type Achievement = {
   track: AchievementTrack;
   reqValue: number;
   dateEarned?: string | null;
-  category: string;
+  category: ReadinessCategory | null;
+  readinessDelta: number;
   description: string;
 };
 
@@ -35,17 +42,19 @@ export async function getUnearnedAchievements() {
     "ACHIEVEMENTS_DATA_SOURCE_ID"
   );
 
-  const response = await notion.dataSources.query({
-    data_source_id: dataSourceId,
-    filter: {
-      property: "Date Earned",
-      date: {
-        is_empty: true,
+  return collectNotionPages((startCursor) =>
+    notion.dataSources.query({
+      data_source_id: dataSourceId,
+      filter: {
+        property: "Date Earned",
+        date: {
+          is_empty: true,
+        },
       },
-    },
-  });
-
-  return response.results;
+      page_size: 100,
+      ...(startCursor ? { start_cursor: startCursor } : {}),
+    })
+  );
 }
 
 async function getDailyCheckboxStats(
@@ -56,17 +65,21 @@ async function getDailyCheckboxStats(
     "DAILY_SITREP_DATA_SOURCE_ID"
   );
 
-  const response = await notion.dataSources.query({
-    data_source_id: dataSourceId,
-    filter: {
-      property: propertyName,
-      checkbox: {
-        equals: true,
+  const results = await collectNotionPages((startCursor) =>
+    notion.dataSources.query({
+      data_source_id: dataSourceId,
+      filter: {
+        property: propertyName,
+        checkbox: {
+          equals: true,
+        },
       },
-    },
-  });
+      page_size: 100,
+      ...(startCursor ? { start_cursor: startCursor } : {}),
+    })
+  );
 
-  const completedDates = response.results
+  const completedDates = results
     .map((page: any) => page.properties?.["Mission Date"]?.date?.start)
     .filter(Boolean);
 
@@ -82,14 +95,18 @@ async function getDailyCheckboxStats(
 async function getWeeklyCheckboxStats(propertyName: string): Promise<ObjectiveStats> {
   const notion = getNotionClient();
   const dataSourceId = getRequiredNotionId("WEEKLY_OPERATIONS_DATABASE_ID");
-  const response = await notion.dataSources.query({
-    data_source_id: dataSourceId,
-    filter: {
-      property: propertyName,
-      checkbox: { equals: true },
-    },
-  });
-  const completedWeeks = response.results
+  const results = await collectNotionPages((startCursor) =>
+    notion.dataSources.query({
+      data_source_id: dataSourceId,
+      filter: {
+        property: propertyName,
+        checkbox: { equals: true },
+      },
+      page_size: 100,
+      ...(startCursor ? { start_cursor: startCursor } : {}),
+    })
+  );
+  const completedWeeks = results
     .map((page: any) => page.properties?.["Week Start"]?.date?.start)
     .filter(Boolean)
     .map((value: string) => value.split("T")[0]);
@@ -145,8 +162,6 @@ async function getObjectiveStats(objective: string): Promise<ObjectiveStats> {
 }
 
 async function awardAchievement(achievement: Achievement, date: string) {
-  const historyExists = await hasServiceHistoryForAchievement(achievement.id);
-
   await getNotionClient().pages.update({
     page_id: achievement.id,
     properties: {
@@ -158,19 +173,41 @@ async function awardAchievement(achievement: Achievement, date: string) {
     },
   });
 
-  if (!historyExists) {
-    await createAchievementServiceHistoryEntry({
-      achievementPageId: achievement.id,
-      achievementTitle: achievement.name,
-      category: achievement.category,
-      description: achievement.description,
-      earnedAt: date,
-    });
+  const refreshed = await getNotionClient().pages.retrieve({
+    page_id: achievement.id,
+  });
+  const earnedAchievement = mapAchievement(refreshed);
+
+  if (
+    !earnedAchievement.category ||
+    earnedAchievement.readinessDelta <= 0
+  ) {
+    throw new Error(
+      `Earned achievement is missing readiness attribution: ${achievement.name}`
+    );
   }
+
+  await ensureAchievementServiceHistoryEntry({
+    achievementPageId: earnedAchievement.id,
+    achievementTitle: earnedAchievement.name,
+    category: earnedAchievement.category,
+    description: earnedAchievement.description,
+    readinessDelta: earnedAchievement.readinessDelta,
+    earnedAt: date,
+  });
 }
 
 function mapAchievement(raw: any): Achievement {
   const props = raw.properties;
+  const rawCategory = props["Category"]?.select?.name ?? "";
+  const category = isReadinessCategory(rawCategory)
+    ? rawCategory
+    : null;
+  const readinessDelta = category
+    ? props[`${category} Point`]?.formula?.number ??
+      props[`${category} Point`]?.number ??
+      0
+    : 0;
 
   return {
     id: raw.id,
@@ -188,11 +225,98 @@ function mapAchievement(raw: any): Achievement {
 
     dateEarned:
       props["Date Earned"]?.date?.start ?? null,
-    category: props["Category"]?.select?.name ?? "None",
+    category,
+    readinessDelta,
     description:
       props["Description"]?.formula?.string ??
       props["Description"]?.rich_text?.[0]?.plain_text ??
       "",
+  };
+}
+
+async function getEarnedAchievements() {
+  const notion = getNotionClient();
+  const dataSourceId = getRequiredNotionId(
+    "ACHIEVEMENTS_DATA_SOURCE_ID"
+  );
+
+  return collectNotionPages((startCursor) =>
+    notion.dataSources.query({
+      data_source_id: dataSourceId,
+      filter: {
+        property: "Date Earned",
+        date: {
+          is_not_empty: true,
+        },
+      },
+      page_size: 100,
+      ...(startCursor ? { start_cursor: startCursor } : {}),
+    })
+  );
+}
+
+export async function reconcileEarnedAchievementHistories() {
+  const [earnedAchievements, historyIndex] = await Promise.all([
+    getEarnedAchievements(),
+    getAchievementReadinessHistoryIndex(),
+  ]);
+  let repaired = 0;
+
+  for (const rawAchievement of earnedAchievements) {
+    const achievement = mapAchievement(rawAchievement);
+
+    if (
+      !achievement.category ||
+      achievement.readinessDelta <= 0 ||
+      !achievement.dateEarned
+    ) {
+      throw new Error(
+        `Earned achievement is missing readiness attribution: ${achievement.name || achievement.id}`
+      );
+    }
+
+    const histories = historyIndex.get(achievement.id) ?? [];
+    const readinessOperationId =
+      getAchievementReadinessOperationId({
+        achievementPageId: achievement.id,
+        category: achievement.category,
+      });
+
+    if (histories.length > 1) {
+      throw new Error(
+        `Duplicate achievement history requires reconciliation: ${achievement.id}`
+      );
+    }
+
+    if (
+      histories[0]?.category === achievement.category &&
+      histories[0]?.readinessDelta ===
+        achievement.readinessDelta &&
+      histories[0]?.readinessOperationId ===
+        readinessOperationId &&
+      histories[0]?.readinessSourceType === "Achievement" &&
+      histories[0]?.readinessSourceId === achievement.id
+    ) {
+      continue;
+    }
+
+    const result = await ensureAchievementServiceHistoryEntry({
+      achievementPageId: achievement.id,
+      achievementTitle: achievement.name,
+      category: achievement.category,
+      description: achievement.description,
+      readinessDelta: achievement.readinessDelta,
+      earnedAt: achievement.dateEarned,
+    });
+
+    if (!result.alreadyApplied) {
+      repaired += 1;
+    }
+  }
+
+  return {
+    inspected: earnedAchievements.length,
+    repaired,
   };
 }
 
@@ -220,6 +344,8 @@ export async function evaluateAchievements() {
       awarded.push(achievement.name);
     }
   }
+
+  await reconcileEarnedAchievementHistories();
 
   return awarded;
 }

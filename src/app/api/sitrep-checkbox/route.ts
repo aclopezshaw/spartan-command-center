@@ -3,9 +3,11 @@ import {
   getTodaySitrep,
   updateDailySitrepCheckbox,
 } from "@/lib/notion";
-import { evaluateAchievements } from "@/lib/achievements";
+import { scheduleAchievementEvaluation } from "@/lib/achievement-evaluation";
 import { hasAuthorizedSession } from "@/lib/auth";
 import { getUnitCohesionHabit } from "@/lib/unit-cohesion";
+
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   if (!(await hasAuthorizedSession())) {
@@ -37,14 +39,15 @@ export async function POST(request: Request) {
 
   await updateDailySitrepCheckbox(todaySitrep.id, propertyName, checked);
 
-  let awarded: string[] = [];
-
   if (checked) {
-    awarded = await evaluateAchievements();
+    scheduleAchievementEvaluation();
   }
 
   return NextResponse.json({
     success: true,
-    awarded,
+    awarded: [],
+    achievementEvaluation: checked
+      ? "scheduled"
+      : "not_requested",
   });
 }

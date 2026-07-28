@@ -72,13 +72,35 @@ import {
 } from "@/lib/fireteam-standings";
 import {
   buildAchievementServiceHistoryProperties,
+  buildCampaignTransitionServiceHistoryProperties,
   buildCampaignServiceHistoryProperties,
+  buildPromotionServiceHistoryProperties,
+  getPromotionHistoryDescription,
+  getPromotionHistoryTitle,
 } from "@/lib/service-history";
+import {
+  compareReadinessTotals,
+  getAchievementReadinessOperationId,
+  isReadinessCategory,
+  summarizeReadinessLedger,
+  type ReadinessLedgerEntry,
+  type ReadinessTotals,
+} from "@/lib/readiness-ledger";
 import {
   buildWeeklyOperationsProperties,
   getWeeklyServiceRecordIds,
   WEEKLY_SERVICE_RECORD_PROPERTY,
 } from "@/lib/weekly-operations";
+import {
+  evaluatePromotion,
+  type PromotionEvaluation,
+  type PromotionRankRecord,
+} from "@/lib/promotion";
+import {
+  getNextRankDefinition,
+  getPreviousRankDefinition,
+  getRankDefinition,
+} from "@/lib/rank-progression";
 
 type ServiceHistoryEntry = {
   eventTitle: string;
@@ -117,8 +139,29 @@ export type CampaignEventState = {
   events: CampaignEvent[];
 };
 
-type NumberProperty = { number?: number | null };
+type NumberProperty = {
+  number?: number | null;
+  formula?: { number?: number | null };
+  rollup?: { number?: number | null };
+};
 type NotionProperties = Record<string, NumberProperty | undefined>;
+type ServiceHistoryProperty = {
+  number?: number | null;
+  title?: Array<{ plain_text?: string }>;
+  rich_text?: Array<{ plain_text?: string }>;
+  formula?: { string?: string | null };
+  select?: { name?: string } | null;
+  relation?: Array<{ id: string }>;
+  date?: { start?: string | null } | null;
+};
+type ServiceHistoryProperties = Record<
+  string,
+  ServiceHistoryProperty | undefined
+>;
+type ServiceHistoryPage = {
+  id: string;
+  properties?: ServiceHistoryProperties;
+};
 type EventQueryResult = {
   id: string;
   properties: {
@@ -176,6 +219,8 @@ type CampaignPhasePage = {
 type AlexServiceRecordPage = {
   id: string;
   properties: {
+    "Current Rank"?: { relation?: Array<{ id: string }> };
+    "Service Score"?: { formula?: { number?: number | null } };
     "Progression Stage"?: { select?: { name?: string } | null };
     "Fireteam Eligibility Status"?: {
       select?: { name?: string } | null;
@@ -301,11 +346,21 @@ export type ServiceHistoryRecord = {
   xpAwarded: number;
   readinessCategory: string;
   readinessPoints: number;
+  readinessOperationId: string | null;
+  readinessSourceType: string | null;
+  readinessSourceId: string | null;
   description: string;
 };
 
 function getNumberProperty(properties: NotionProperties, name: string) {
-  return properties[name]?.number ?? 0;
+  const property = properties[name];
+
+  return (
+    property?.number ??
+    property?.formula?.number ??
+    property?.rollup?.number ??
+    0
+  );
 }
 
 async function getServiceHistoryDataSourceId() {
@@ -322,7 +377,10 @@ async function getServiceHistoryDataSourceId() {
   return dataSourceId;
 }
 
-function getTextProperty(properties: Record<string, any>, name: string) {
+function getTextProperty(
+  properties: ServiceHistoryProperties,
+  name: string
+) {
   return (
     properties[name]?.title?.[0]?.plain_text ??
     properties[name]?.rich_text?.[0]?.plain_text ??
@@ -355,6 +413,10 @@ export async function getServiceHistoryRecords(): Promise<ServiceHistoryRecord[]
   return results
     .map((page: any) => {
       const properties = page.properties ?? {};
+      const readinessCategory =
+        properties["Readiness Category"]?.select?.name ?? "None";
+      const storedReadinessDelta =
+        properties["Readiness Delta"]?.number;
       return {
         id: page.id,
         title: getTextProperty(properties, "Title"),
@@ -363,18 +425,23 @@ export async function getServiceHistoryRecords(): Promise<ServiceHistoryRecord[]
           properties["Entry Type"]?.select?.name ?? "Record",
         campaignDay: properties["Campaign Day"]?.number ?? null,
         xpAwarded: properties["XP Awarded"]?.number ?? 0,
-        readinessCategory:
-          properties["Readiness Category"]?.select?.name ?? "None",
-        readinessPoints: [
+        readinessCategory,
+        readinessPoints:
+          storedReadinessDelta ??
+          ([
           "Physical",
           "Recovery",
           "Intelligence",
           "Professional",
-        ].includes(
-          properties["Readiness Category"]?.select?.name ?? ""
-        )
+          ].includes(readinessCategory)
           ? 1
-          : 0,
+          : 0),
+        readinessOperationId:
+          getTextProperty(properties, "Readiness Operation ID") || null,
+        readinessSourceType:
+          properties["Readiness Source Type"]?.select?.name ?? null,
+        readinessSourceId:
+          getTextProperty(properties, "Readiness Source ID") || null,
         description: getTextProperty(properties, "Description"),
       };
     })
@@ -595,7 +662,7 @@ async function queryAllDataSourcePages({
   filter,
 }: {
   dataSourceId: string;
-  filter: Record<string, unknown>;
+  filter?: Record<string, unknown>;
 }) {
   const notion = getNotionClient();
   const results: unknown[] = [];
@@ -604,7 +671,7 @@ async function queryAllDataSourcePages({
   do {
     const response = await notion.dataSources.query({
       data_source_id: dataSourceId,
-      filter: filter as never,
+      ...(filter ? { filter: filter as never } : {}),
       page_size: 100,
       ...(startCursor ? { start_cursor: startCursor } : {}),
     });
@@ -1067,14 +1134,12 @@ async function ensureFrozenPhaseXpSnapshot(
   return verified.frozenSnapshot;
 }
 
-async function hasCampaignRolloverHistory(
+async function getCampaignRolloverHistoryRecords(
   phase: RolloverPhase,
   historyTitle = getRolloverHistoryTitle(phase)
 ) {
-  const notion = getNotionClient();
-  const dataSourceId = await getServiceHistoryDataSourceId();
-  const response = await notion.dataSources.query({
-    data_source_id: dataSourceId,
+  return queryAllDataSourcePages({
+    dataSourceId: await getServiceHistoryDataSourceId(),
     filter: {
       and: [
         {
@@ -1091,10 +1156,7 @@ async function hasCampaignRolloverHistory(
         },
       ],
     },
-    page_size: 1,
   });
-
-  return response.results.length > 0;
 }
 
 export async function getCampaignRolloverStatus(
@@ -1123,14 +1185,17 @@ export async function getCampaignRolloverStatus(
   const historyTitle = transition
     ? getRolloverHistoryTitle(transition.source)
     : null;
-  const historyExists = transition
-    ? await hasCampaignRolloverHistory(transition.source, historyTitle!)
-    : false;
+  const historyRecords = transition
+    ? await getCampaignRolloverHistoryRecords(
+        transition.source,
+        historyTitle!
+      )
+    : [];
   const evaluation = evaluateRollover({
     phases,
     events: rolloverEvents,
     operationalDate,
-    historyExists,
+    historyRecordCount: historyRecords.length,
   });
   const xpState = transition
     ? await getRolloverPhaseXpState(transition.source.id, operationalDate)
@@ -1204,39 +1269,47 @@ async function createCampaignRolloverHistory(
   const databaseId = getRequiredNotionId("SERVICE_HISTORY_DATABASE_ID");
   const serviceRecordPageId = await getAlexServiceRecordPageId();
   const historyTitle = getRolloverHistoryTitle(source);
+  const existing = await getCampaignRolloverHistoryRecords(
+    source,
+    historyTitle
+  );
 
-  if (await hasCampaignRolloverHistory(source, historyTitle)) {
+  if (existing.length > 1) {
+    throw new Error(
+      `Multiple Campaign Service History records exist for ${source.phaseName}`
+    );
+  }
+
+  if (existing.length === 1) {
     return false;
   }
 
   await notion.pages.create({
     parent: { database_id: databaseId },
-    properties: {
-      Title: { title: [{ text: { content: historyTitle } }] },
-      Date: { date: { start: operationalDate } },
-      "Campaign Day": { number: source.phaseLength || null },
-      "Entry Type": { select: { name: "Campaign" } },
-      "XP Awarded": { number: 0 },
-      "Readiness Category": { select: { name: "None" } },
-      Description: {
-        rich_text: [
-          {
-            text: {
-              content: `${source.campaignName} ${source.phaseName} completed with ${snapshot.earnedXp} XP and a ${snapshot.medalEarned} campaign medal. ${target.phaseName} activated.`,
-            },
-          },
-        ],
-      },
-      "Related Campaign": { relation: [{ id: source.id }] },
-      ...(serviceRecordPageId
-        ? {
-            "Related Service Record": {
-              relation: [{ id: serviceRecordPageId }],
-            },
-          }
-        : {}),
-    },
+    properties: buildCampaignTransitionServiceHistoryProperties({
+      title: historyTitle,
+      campaignDay: source.phaseLength,
+      completedAt: operationalDate,
+      campaignName: source.campaignName,
+      sourcePhaseName: source.phaseName,
+      targetPhaseName: target.phaseName,
+      earnedXp: snapshot.earnedXp,
+      medalEarned: snapshot.medalEarned,
+      campaignPageId: source.id,
+      serviceRecordPageId,
+    }),
   });
+
+  const verified = await getCampaignRolloverHistoryRecords(
+    source,
+    historyTitle
+  );
+
+  if (verified.length !== 1) {
+    throw new Error(
+      `Campaign Service History did not reconcile exactly once for ${source.phaseName}`
+    );
+  }
 
   return true;
 }
@@ -1473,17 +1546,15 @@ export async function getAlexReadinessScores(): Promise<ReadinessScores> {
   const achievementsDataSourceId = process.env.ACHIEVEMENTS_DATA_SOURCE_ID;
   if (!achievementsDataSourceId) return storedScores;
 
-  const notion = getNotionClient();
-  const earnedAchievements = await notion.dataSources.query({
-    data_source_id: achievementsDataSourceId,
+  const earnedAchievements = await queryAllDataSourcePages({
+    dataSourceId: achievementsDataSourceId,
     filter: {
       property: "Status",
       formula: { string: { equals: "Earned" } },
     },
-    page_size: 100,
   });
 
-  const achievementScores = earnedAchievements.results.reduce(
+  const achievementScores = earnedAchievements.reduce<ReadinessScores>(
     (scores, page: any) => {
       const achievementProperties = page.properties ?? {};
       scores.physical += getNumberProperty(achievementProperties, "Physical Point");
@@ -1502,6 +1573,135 @@ export async function getAlexReadinessScores(): Promise<ReadinessScores> {
   );
 
   return achievementScores;
+}
+
+export type ReadinessLedgerStatus = {
+  available: boolean;
+  authoritativeTotals: ReadinessTotals;
+  ledgerTotals: ReadinessTotals;
+  difference: ReadinessTotals;
+  reconciled: boolean;
+  duplicateOperationIds: string[];
+  invalidRecordIds: string[];
+  entries: ReadinessLedgerEntry[];
+};
+
+export async function getReadinessLedgerStatus(): Promise<ReadinessLedgerStatus> {
+  const authoritativeTotals = await getAlexReadinessScores();
+  const dataSourceId = await getServiceHistoryDataSourceId();
+  const schema = await getNotionClient().dataSources.retrieve({
+    data_source_id: dataSourceId,
+  });
+  const properties = (
+    schema as unknown as {
+      properties?: Record<string, unknown>;
+    }
+  ).properties ?? {};
+  const available = [
+    "Readiness Delta",
+    "Readiness Operation ID",
+    "Readiness Source Type",
+    "Readiness Source ID",
+  ].every((name) => Boolean(properties[name]));
+
+  if (!available) {
+    return {
+      available: false,
+      authoritativeTotals,
+      ledgerTotals: {
+        physical: 0,
+        recovery: 0,
+        intelligence: 0,
+        professional: 0,
+      },
+      difference: {
+        physical: -authoritativeTotals.physical,
+        recovery: -authoritativeTotals.recovery,
+        intelligence: -authoritativeTotals.intelligence,
+        professional: -authoritativeTotals.professional,
+      },
+      reconciled: false,
+      duplicateOperationIds: [],
+      invalidRecordIds: [],
+      entries: [],
+    };
+  }
+
+  const pages = await queryAllDataSourcePages({
+    dataSourceId,
+    filter: {
+      property: "Readiness Operation ID",
+      rich_text: { is_not_empty: true },
+    },
+  });
+  const entries: ReadinessLedgerEntry[] = [];
+  const invalidRecordIds: string[] = [];
+
+  for (const page of pages as ServiceHistoryPage[]) {
+    const pageProperties = page.properties ?? {};
+    const category =
+      pageProperties["Readiness Category"]?.select?.name ?? "";
+    const operationId = getTextProperty(
+      pageProperties,
+      "Readiness Operation ID"
+    );
+    const sourceType =
+      pageProperties["Readiness Source Type"]?.select?.name ?? "";
+    const sourceId = getTextProperty(
+      pageProperties,
+      "Readiness Source ID"
+    );
+    const delta =
+      pageProperties["Readiness Delta"]?.number ?? null;
+    const occurredAt =
+      pageProperties.Date?.date?.start ?? null;
+
+    if (
+      !isReadinessCategory(category) ||
+      !operationId ||
+      !sourceType ||
+      !sourceId ||
+      typeof delta !== "number" ||
+      !Number.isFinite(delta) ||
+      !occurredAt
+    ) {
+      invalidRecordIds.push(page.id);
+      continue;
+    }
+
+    entries.push({
+      operationId,
+      sourceType,
+      sourceId,
+      category,
+      delta,
+      occurredAt,
+      reason: getTextProperty(pageProperties, "Description"),
+    });
+  }
+
+  const { totals: ledgerTotals, duplicateOperationIds } =
+    summarizeReadinessLedger(entries);
+  const comparison = compareReadinessTotals(
+    authoritativeTotals,
+    ledgerTotals
+  );
+
+  return {
+    available: true,
+    authoritativeTotals,
+    ledgerTotals,
+    difference: comparison.difference,
+    reconciled:
+      comparison.reconciled &&
+      duplicateOperationIds.length === 0 &&
+      invalidRecordIds.length === 0,
+    duplicateOperationIds,
+    invalidRecordIds,
+    entries: entries.sort((a, b) =>
+      b.occurredAt.localeCompare(a.occurredAt)
+    ),
+  };
 }
 
 export async function completeCampaignEvent({
@@ -2026,6 +2226,512 @@ export async function getAlexServiceRecord() {
   return notion.pages.retrieve({
     page_id: page.id,
   });
+}
+
+type RankProgressionPage = {
+  id: string;
+  properties: {
+    Rank?: { title?: Array<{ plain_text?: string }> };
+    "XP Required"?: { number?: number | null };
+  };
+};
+
+type PromotionHistoryPage = {
+  id: string;
+  properties?: {
+    Title?: { title?: Array<{ plain_text?: string }> };
+    Date?: { date?: { start?: string | null } | null };
+    "Entry Type"?: { select?: { name?: string } | null };
+    "XP Awarded"?: { number?: number | null };
+    "Readiness Category"?: {
+      select?: { name?: string } | null;
+    };
+    Description?: { rich_text?: Array<{ plain_text?: string }> };
+    "Related Service Record"?: {
+      relation?: Array<{ id: string }>;
+    };
+  };
+};
+
+export type PromotionStatus = PromotionEvaluation & {
+  operationalDate: string;
+};
+
+export type PromotionTransitionResult = PromotionStatus & {
+  transition: {
+    fromRank: PromotionRankRecord;
+    toRank: PromotionRankRecord;
+    promotedAt: string;
+    alreadyApplied: boolean;
+  };
+};
+
+let rankProgressionDataSourceId: string | null = null;
+
+async function getRankProgressionDataSourceId() {
+  if (rankProgressionDataSourceId) {
+    return rankProgressionDataSourceId;
+  }
+
+  const serviceRecordDataSource =
+    await getNotionClient().dataSources.retrieve({
+      data_source_id: getRequiredNotionId(
+        "SERVICE_RECORD_DATA_SOURCE_ID"
+      ),
+    });
+  const currentRankProperty = (
+    serviceRecordDataSource as unknown as {
+      properties?: Record<
+        string,
+        {
+          type?: string;
+          relation?: { data_source_id?: string };
+        }
+      >;
+    }
+  ).properties?.["Current Rank"];
+
+  if (
+    currentRankProperty?.type !== "relation" ||
+    !currentRankProperty.relation?.data_source_id
+  ) {
+    throw new Error(
+      "Service Record.Current Rank is missing or Rank Progression is inaccessible. Share Rank Progression with the Alex's Spartan Command Center integration, then run npm run migrate:rank-progression-schema."
+    );
+  }
+
+  rankProgressionDataSourceId =
+    currentRankProperty.relation.data_source_id;
+  return rankProgressionDataSourceId;
+}
+
+function getRankRecord(
+  page: RankProgressionPage
+): PromotionRankRecord | null {
+  const name = page.properties.Rank?.title?.[0]?.plain_text?.trim();
+  const minimumXp = page.properties["XP Required"]?.number;
+
+  if (!name || minimumXp === null || minimumXp === undefined) {
+    return null;
+  }
+
+  const definition = getRankDefinition(name);
+
+  return {
+    pageId: page.id,
+    name: definition?.name ?? name,
+    minimumXp,
+  };
+}
+
+async function getPromotionRecords(
+  serviceRecord: AlexServiceRecordPage
+) {
+  const currentRankIds =
+    serviceRecord.properties["Current Rank"]?.relation ?? [];
+  const currentRankPage =
+    currentRankIds.length === 1
+      ? ((await getNotionClient().pages.retrieve({
+          page_id: currentRankIds[0].id,
+        })) as unknown as RankProgressionPage)
+      : null;
+  const currentRank = currentRankPage
+    ? getRankRecord(currentRankPage)
+    : null;
+  const currentDefinition = currentRank
+    ? getRankDefinition(currentRank.name)
+    : null;
+  const previousDefinition = currentDefinition
+    ? getPreviousRankDefinition(currentDefinition.name)
+    : null;
+  const targetDefinition = currentDefinition
+    ? getNextRankDefinition(currentDefinition.name)
+    : null;
+  const rankPages = (await queryAllDataSourcePages({
+    dataSourceId: await getRankProgressionDataSourceId(),
+  })) as RankProgressionPage[];
+  const rankRecords = rankPages
+    .map(getRankRecord)
+    .filter(
+      (record): record is PromotionRankRecord => record !== null
+    );
+  const findDefinitionRecord = (
+    definition: ReturnType<typeof getRankDefinition>
+  ) =>
+    definition
+      ? (rankRecords.find(
+          (record) =>
+            getRankDefinition(record.name)?.name === definition.name
+        ) ?? null)
+      : null;
+
+  return {
+    currentRank,
+    previousRank: findDefinitionRecord(previousDefinition),
+    targetRank: findDefinitionRecord(targetDefinition),
+  };
+}
+
+async function getPromotionHistoryPages({
+  serviceRecordPageId,
+  fromRank,
+  toRank,
+}: {
+  serviceRecordPageId: string;
+  fromRank: string;
+  toRank: string;
+}) {
+  return (await queryAllDataSourcePages({
+    dataSourceId: await getServiceHistoryDataSourceId(),
+    filter: {
+      and: [
+        {
+          property: "Title",
+          title: {
+            equals: getPromotionHistoryTitle(fromRank, toRank),
+          },
+        },
+        {
+          property: "Entry Type",
+          select: { equals: "Promotion" },
+        },
+        {
+          property: "Related Service Record",
+          relation: { contains: serviceRecordPageId },
+        },
+      ],
+    },
+  })) as PromotionHistoryPage[];
+}
+
+function getPromotionHistoryEvidence({
+  pages,
+  serviceRecordPageId,
+  fromRank,
+  toRank,
+}: {
+  pages: PromotionHistoryPage[];
+  serviceRecordPageId: string;
+  fromRank: string;
+  toRank: string;
+}) {
+  const page = pages.length === 1 ? pages[0] : null;
+  const properties = page?.properties;
+  const promotedAt = properties?.Date?.date?.start ?? null;
+  const verified =
+    !!page &&
+    properties?.Title?.title?.[0]?.plain_text ===
+      getPromotionHistoryTitle(fromRank, toRank) &&
+    properties?.["Entry Type"]?.select?.name === "Promotion" &&
+    (properties?.["XP Awarded"]?.number ?? 0) === 0 &&
+    properties?.["Readiness Category"]?.select?.name === "None" &&
+    properties?.Description?.rich_text?.[0]?.plain_text ===
+      getPromotionHistoryDescription(fromRank, toRank) &&
+    properties?.["Related Service Record"]?.relation?.length === 1 &&
+    properties["Related Service Record"].relation?.[0]?.id ===
+      serviceRecordPageId &&
+    !!promotedAt;
+
+  return {
+    recordCount: pages.length,
+    verified,
+    promotedAt,
+  };
+}
+
+export async function getPromotionStatus(
+  operationalDate = getOperationalDateKey()
+): Promise<PromotionStatus> {
+  const serviceRecord = (await findAlexServiceRecord()) as
+    | AlexServiceRecordPage
+    | null;
+
+  if (!serviceRecord) {
+    throw new Error("Service Record not found for ALEX-225");
+  }
+
+  const { previousRank, currentRank, targetRank } =
+    await getPromotionRecords(serviceRecord);
+  const currentXp =
+    serviceRecord.properties["Service Score"]?.formula?.number ?? 0;
+  const historyPages =
+    previousRank && currentRank
+      ? await getPromotionHistoryPages({
+          serviceRecordPageId: serviceRecord.id,
+          fromRank: previousRank.name,
+          toRank: currentRank.name,
+        })
+      : [];
+  const historyEvidence =
+    previousRank && currentRank
+      ? {
+          previousRank,
+          ...getPromotionHistoryEvidence({
+            pages: historyPages,
+            serviceRecordPageId: serviceRecord.id,
+            fromRank: previousRank.name,
+            toRank: currentRank.name,
+          }),
+        }
+      : undefined;
+
+  return {
+    ...evaluatePromotion({
+      currentRank,
+      targetRank,
+      currentXp,
+      historyEvidence,
+    }),
+    operationalDate,
+  };
+}
+
+export class PromotionNotAvailableError extends Error {
+  status: PromotionStatus;
+
+  constructor(status: PromotionStatus, message?: string) {
+    super(
+      message ||
+        status.reasons.join(" ") ||
+        "Promotion is not available."
+    );
+    this.name = "PromotionNotAvailableError";
+    this.status = status;
+  }
+}
+
+async function ensurePromotionHistory({
+  serviceRecordPageId,
+  fromRank,
+  toRank,
+  promotedAt,
+}: {
+  serviceRecordPageId: string;
+  fromRank: PromotionRankRecord;
+  toRank: PromotionRankRecord;
+  promotedAt: string;
+}) {
+  let pages = await getPromotionHistoryPages({
+    serviceRecordPageId,
+    fromRank: fromRank.name,
+    toRank: toRank.name,
+  });
+
+  if (pages.length > 1) {
+    throw new Error(
+      `Multiple Service History records exist for the ${fromRank.name} to ${toRank.name} promotion`
+    );
+  }
+
+  if (pages.length === 0) {
+    await getNotionClient().pages.create({
+      parent: {
+        database_id: getRequiredNotionId(
+          "SERVICE_HISTORY_DATABASE_ID"
+        ),
+      },
+      properties: buildPromotionServiceHistoryProperties({
+        fromRank: fromRank.name,
+        toRank: toRank.name,
+        promotedAt,
+        serviceRecordPageId,
+      }),
+    });
+    pages = await getPromotionHistoryPages({
+      serviceRecordPageId,
+      fromRank: fromRank.name,
+      toRank: toRank.name,
+    });
+  }
+
+  const evidence = getPromotionHistoryEvidence({
+    pages,
+    serviceRecordPageId,
+    fromRank: fromRank.name,
+    toRank: toRank.name,
+  });
+
+  if (
+    evidence.recordCount !== 1 ||
+    !evidence.verified ||
+    !evidence.promotedAt
+  ) {
+    throw new Error(
+      `Promotion Service History did not reconcile exactly once for ${toRank.name}`
+    );
+  }
+
+  return evidence.promotedAt;
+}
+
+const activePromotions = new Map<
+  string,
+  Promise<PromotionTransitionResult>
+>();
+
+async function executePromotionInternal({
+  expectedCurrentRankPageId,
+  expectedTargetRankPageId,
+  operationalDate,
+}: {
+  expectedCurrentRankPageId: string;
+  expectedTargetRankPageId: string;
+  operationalDate: string;
+}): Promise<PromotionTransitionResult> {
+  const initial = await getPromotionStatus(operationalDate);
+
+  if (
+    initial.currentRank?.pageId === expectedTargetRankPageId
+  ) {
+    const previousRank = getRankRecord(
+      (await getNotionClient().pages.retrieve({
+        page_id: expectedCurrentRankPageId,
+      })) as unknown as RankProgressionPage
+    );
+
+    if (!previousRank) {
+      throw new Error(
+        "Previously awarded rank record could not be verified"
+      );
+    }
+
+    if (
+      getNextRankDefinition(previousRank.name)?.name !==
+      getRankDefinition(initial.currentRank.name)?.name
+    ) {
+      throw new PromotionNotAvailableError(
+        initial,
+        "Promotion retry does not match the awarded rank transition."
+      );
+    }
+
+    const serviceRecord = (await findAlexServiceRecord()) as
+      | AlexServiceRecordPage
+      | null;
+
+    if (!serviceRecord) {
+      throw new Error("Service Record not found for ALEX-225");
+    }
+
+    const promotedAt = await ensurePromotionHistory({
+      serviceRecordPageId: serviceRecord.id,
+      fromRank: previousRank,
+      toRank: initial.currentRank,
+      promotedAt: operationalDate,
+    });
+    const verified = await getPromotionStatus(operationalDate);
+
+    if (
+      verified.currentRank?.pageId !== expectedTargetRankPageId ||
+      verified.state === "finalizing" ||
+      verified.state === "conflict"
+    ) {
+      throw new Error("Promotion transition and history did not verify");
+    }
+
+    return {
+      ...verified,
+      transition: {
+        fromRank: previousRank,
+        toRank: verified.currentRank,
+        promotedAt,
+        alreadyApplied: true,
+      },
+    };
+  }
+
+  if (
+    initial.currentRank?.pageId !== expectedCurrentRankPageId ||
+    initial.targetRank?.pageId !== expectedTargetRankPageId
+  ) {
+    throw new PromotionNotAvailableError(
+      initial,
+      "Promotion order is stale. Refresh Personnel Command status."
+    );
+  }
+
+  if (!initial.canPromote || initial.state !== "eligible") {
+    throw new PromotionNotAvailableError(initial);
+  }
+
+  const fromRank = initial.currentRank;
+  const toRank = initial.targetRank;
+  const serviceRecord = (await findAlexServiceRecord()) as
+    | AlexServiceRecordPage
+    | null;
+
+  if (!serviceRecord) {
+    throw new Error("Service Record not found for ALEX-225");
+  }
+
+  await getNotionClient().pages.update({
+    page_id: serviceRecord.id,
+    properties: {
+      "Current Rank": {
+        relation: [{ id: toRank.pageId }],
+      },
+    },
+  });
+
+  const verified = await getPromotionStatus(operationalDate);
+
+  if (verified.currentRank?.pageId !== toRank.pageId) {
+    throw new Error("Promotion transition did not verify");
+  }
+
+  const promotedAt = await ensurePromotionHistory({
+    serviceRecordPageId: serviceRecord.id,
+    fromRank,
+    toRank,
+    promotedAt: operationalDate,
+  });
+  const fullyVerified = await getPromotionStatus(operationalDate);
+
+  if (
+    fullyVerified.currentRank?.pageId !== toRank.pageId ||
+    fullyVerified.state === "finalizing" ||
+    fullyVerified.state === "conflict"
+  ) {
+    throw new Error("Promotion transition and history did not verify");
+  }
+
+  return {
+    ...fullyVerified,
+    transition: {
+      fromRank,
+      toRank,
+      promotedAt,
+      alreadyApplied: false,
+    },
+  };
+}
+
+export function executePromotion({
+  expectedCurrentRankPageId,
+  expectedTargetRankPageId,
+  operationalDate = getOperationalDateKey(),
+}: {
+  expectedCurrentRankPageId: string;
+  expectedTargetRankPageId: string;
+  operationalDate?: string;
+}) {
+  const operationKey = `${expectedCurrentRankPageId}:${expectedTargetRankPageId}`;
+  const existing = activePromotions.get(operationKey);
+
+  if (existing) {
+    return existing;
+  }
+
+  const operation = executePromotionInternal({
+      expectedCurrentRankPageId,
+      expectedTargetRankPageId,
+      operationalDate,
+    }).finally(() => {
+      activePromotions.delete(operationKey);
+    });
+  activePromotions.set(operationKey, operation);
+
+  return operation;
 }
 
 function getPersistedIndividualCompletionStatus(
@@ -3257,48 +3963,192 @@ export async function createServiceHistoryEntry({
   });
 }
 
-export async function createAchievementServiceHistoryEntry({
+async function getAchievementServiceHistoryPages(
+  achievementPageId: string
+): Promise<ServiceHistoryPage[]> {
+  return (await queryAllDataSourcePages({
+    dataSourceId: await getServiceHistoryDataSourceId(),
+    filter: {
+      property: "Related Achievement",
+      relation: { contains: achievementPageId },
+    },
+  })) as ServiceHistoryPage[];
+}
+
+export type AchievementReadinessHistorySnapshot = {
+  pageId: string;
+  category: string;
+  readinessDelta: number | null;
+  readinessOperationId: string;
+  readinessSourceType: string;
+  readinessSourceId: string;
+};
+
+export async function getAchievementReadinessHistoryIndex() {
+  const pages = (await queryAllDataSourcePages({
+    dataSourceId: await getServiceHistoryDataSourceId(),
+    filter: {
+      property: "Entry Type",
+      select: { equals: "Achievement" },
+    },
+  })) as ServiceHistoryPage[];
+  const index = new Map<
+    string,
+    AchievementReadinessHistorySnapshot[]
+  >();
+
+  for (const page of pages) {
+    const properties = page.properties ?? {};
+    const achievementIds =
+      properties["Related Achievement"]?.relation?.map(
+        (relation: { id: string }) => relation.id
+      ) ?? [];
+
+    for (const achievementId of achievementIds) {
+      const snapshots = index.get(achievementId) ?? [];
+      snapshots.push({
+        pageId: page.id,
+        category:
+          properties["Readiness Category"]?.select?.name ?? "",
+        readinessDelta:
+          properties["Readiness Delta"]?.number ?? null,
+        readinessOperationId: getTextProperty(
+          properties,
+          "Readiness Operation ID"
+        ),
+        readinessSourceType:
+          properties["Readiness Source Type"]?.select?.name ?? "",
+        readinessSourceId: getTextProperty(
+          properties,
+          "Readiness Source ID"
+        ),
+      });
+      index.set(achievementId, snapshots);
+    }
+  }
+
+  return index;
+}
+
+export async function ensureAchievementServiceHistoryEntry({
   achievementPageId,
   achievementTitle,
   category,
   description,
+  readinessDelta,
   earnedAt = new Date().toISOString(),
 }: {
   achievementPageId: string;
   achievementTitle: string;
   category: string;
   description?: string;
+  readinessDelta: number;
   earnedAt?: string;
 }) {
+  if (!isReadinessCategory(category)) {
+    throw new Error(
+      `Achievement readiness category is invalid: ${category || "missing"}`
+    );
+  }
+  if (!Number.isFinite(readinessDelta) || readinessDelta <= 0) {
+    throw new Error(
+      `Achievement readiness delta must be positive: ${readinessDelta}`
+    );
+  }
+
   const notion = getNotionClient();
   const databaseId = getRequiredNotionId("SERVICE_HISTORY_DATABASE_ID");
   const serviceRecordPageId = await getAlexServiceRecordPageId();
-
-  return notion.pages.create({
-    parent: { database_id: databaseId },
-    properties: buildAchievementServiceHistoryProperties({
-      achievementPageId,
-      achievementTitle,
-      category,
-      description,
-      earnedAt,
-      serviceRecordPageId,
-    }),
+  const readinessOperationId = getAchievementReadinessOperationId({
+    achievementPageId,
+    category,
   });
+  const existing = await getAchievementServiceHistoryPages(
+    achievementPageId
+  );
+
+  if (existing.length > 1) {
+    throw new Error(
+      `Duplicate achievement history requires reconciliation: ${achievementPageId}`
+    );
+  }
+
+  const properties = buildAchievementServiceHistoryProperties({
+    achievementPageId,
+    achievementTitle,
+    category,
+    description,
+    readinessDelta,
+    readinessOperationId,
+    earnedAt,
+    serviceRecordPageId,
+  });
+  const currentProperties = (
+    existing[0] as ServiceHistoryPage | undefined
+  )?.properties;
+  const alreadyCanonical =
+    currentProperties &&
+    currentProperties["Readiness Delta"]?.number === readinessDelta &&
+    getTextProperty(
+      currentProperties,
+      "Readiness Operation ID"
+    ) === readinessOperationId &&
+    currentProperties["Readiness Source Type"]?.select?.name ===
+      "Achievement" &&
+    getTextProperty(currentProperties, "Readiness Source ID") ===
+      achievementPageId &&
+    currentProperties["Readiness Category"]?.select?.name ===
+      category;
+
+  if (existing[0] && !alreadyCanonical) {
+    await notion.pages.update({
+      page_id: existing[0].id,
+      properties,
+    });
+  } else if (!existing[0]) {
+    await notion.pages.create({
+      parent: { database_id: databaseId },
+      properties,
+    });
+  }
+
+  const verified = await getAchievementServiceHistoryPages(
+    achievementPageId
+  );
+  const verifiedProperties = (
+    verified[0] as ServiceHistoryPage | undefined
+  )?.properties;
+
+  if (
+    verified.length !== 1 ||
+    verifiedProperties?.["Readiness Delta"]?.number !==
+      readinessDelta ||
+    getTextProperty(
+      verifiedProperties ?? {},
+      "Readiness Operation ID"
+    ) !== readinessOperationId ||
+    getTextProperty(
+      verifiedProperties ?? {},
+      "Readiness Source ID"
+    ) !== achievementPageId
+  ) {
+    throw new Error(
+      `Achievement readiness history verification failed: ${achievementPageId}`
+    );
+  }
+
+  return {
+    pageId: verified[0].id,
+    readinessOperationId,
+    alreadyApplied: Boolean(existing[0] && alreadyCanonical),
+  };
 }
 
 export async function hasServiceHistoryForAchievement(achievementPageId: string) {
-  const notion = getNotionClient();
-  const dataSourceId = await getServiceHistoryDataSourceId();
-  const response = await notion.dataSources.query({
-    data_source_id: dataSourceId,
-    filter: {
-      property: "Related Achievement",
-      relation: { contains: achievementPageId },
-    },
-    page_size: 1,
-  });
-  return response.results.length > 0;
+  const history = await getAchievementServiceHistoryPages(
+    achievementPageId
+  );
+  return history.length > 0;
 }
 
 export async function updateDailySitrepCheckbox(

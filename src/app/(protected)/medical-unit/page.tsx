@@ -78,6 +78,10 @@ type QuarterResponse = {
     upNext: QuarterSummary | null;
 };
 
+const TRANSFER_CREDITS = 30;
+const COMPLETED_QUARTER_CREDITS = 0;
+const DEGREE_CREDITS_REQUIRED = 160;
+
 function getCourseName(courseCode: string) {
     const courseNames: Record<string, string> = {
         "GPS 2100": "Galen Pathway to Success",
@@ -138,7 +142,7 @@ function ProgressBar({
             <div
                 className="absolute inset-y-0 bg-white"
                 style={{
-                    left: `${requiredWidth}%`,
+                    right: 0,
                     width: `${optionalFill}%`,
                 }}
             />
@@ -468,6 +472,17 @@ export default function MedicalUnitPage() {
         courses: pipeline,
         assignmentsLoaded: pipelineLoaded,
     });
+    const currentCredits = quarter?.credits ?? 0;
+    const completedCredits =
+        TRANSFER_CREDITS + COMPLETED_QUARTER_CREDITS;
+    const transferCreditWidth =
+        (TRANSFER_CREDITS / DEGREE_CREDITS_REQUIRED) * 100;
+    const currentCreditWidth =
+        (currentCredits / DEGREE_CREDITS_REQUIRED) * 100;
+    const degreeProgress = Math.round(
+        (completedCredits / DEGREE_CREDITS_REQUIRED) * 100
+    );
+
     return (
         <main className="h-screen overflow-y-auto bg-black p-6 font-mono text-slate-100 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="mx-auto max-w-6xl space-y-6">
@@ -524,23 +539,43 @@ export default function MedicalUnitPage() {
                                 </div>
                                 <div className="text-right">
                                     <p className="text-3xl font-bold text-cyan-400">
-                                        29%
+                                        {degreeProgress}%
                                     </p>
                                     <p className="mt-1 text-sm text-slate-500">
-                                        42 / 120 Credits
+                                        {completedCredits} /{" "}
+                                        {DEGREE_CREDITS_REQUIRED} Credits
                                     </p>
                                 </div>
                             </div>
-                            <div className="mt-6 h-4 w-full overflow-hidden rounded-sm border border-cyan-700/50 bg-slate-900">
+                            <div
+                                className="relative mt-6 h-4 w-full overflow-hidden rounded-sm border border-cyan-700/50 bg-slate-900"
+                                aria-label={`${TRANSFER_CREDITS} transfer credits completed plus ${currentCredits} current credits in progress toward ${DEGREE_CREDITS_REQUIRED} required credits`}
+                            >
                                 <div
-                                    className="h-full bg-cyan-400 shadow-[0_0_18px_rgba(34,211,238,0.75)] transition-all duration-500"
-                                    style={{ width: "29%" }}
+                                    className="absolute inset-y-0 left-0 bg-cyan-400 shadow-[0_0_18px_rgba(34,211,238,0.75)] transition-all duration-500"
+                                    style={{ width: `${transferCreditWidth}%` }}
+                                />
+                                <div
+                                    className="absolute inset-y-0 bg-white transition-all duration-500"
+                                    style={{
+                                        left: `${transferCreditWidth}%`,
+                                        width: `${currentCreditWidth}%`,
+                                    }}
                                 />
                             </div>
-                            <div className="mt-4 flex justify-between text-xs uppercase tracking-[0.2em] text-slate-500">
-                                <span>General Education</span>
-                                <span>Clinical Phase</span>
-                                <span>Graduation</span>
+                            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-xs uppercase tracking-[0.18em] text-slate-500">
+                                <span>
+                                    <span className="text-cyan-400">
+                                        {TRANSFER_CREDITS}
+                                    </span>{" "}
+                                    Transfer
+                                </span>
+                                <span>
+                                    <span className="text-white">
+                                        {currentCredits}
+                                    </span>{" "}
+                                    Current
+                                </span>
                             </div>
                         </Panel>
                     </div>

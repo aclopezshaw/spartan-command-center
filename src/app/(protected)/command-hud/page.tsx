@@ -11,13 +11,17 @@ import {
   getOperationalWeekRange,
 } from "@/lib/date";
 import { getCampaignPhaseDisplayName } from "@/lib/campaign";
-import { getCeremonialEvent } from "@/lib/ceremonial-events";
+import {
+  getCeremonialEvent,
+  getPromotionCeremonialEvent,
+} from "@/lib/ceremonial-events";
 import { getHudBackground } from "@/lib/hud-background";
 import {
   getActiveCampaignEventState,
   getAlexServiceRecord,
   getFireteamAssignmentStatus,
   getOrCreateWeeklyOperations,
+  getPromotionStatus,
   getTodaySitrep,
   getWorkoutCountForWeek,
   updateWeeklyOperationCheckbox,
@@ -126,11 +130,25 @@ export default async function CommandHudPage() {
     serviceRecordProperties["Designation"]?.title?.[0]?.plain_text ?? "NULL";
 
   const activeCampaignEventState = await getActiveCampaignEventState();
-  const fireteamAssignment = await getFireteamAssignmentStatus();
-  const ceremonialEvent = getCeremonialEvent(
+  const [fireteamAssignment, promotion] = await Promise.all([
+    getFireteamAssignmentStatus(),
+    getPromotionStatus(),
+  ]);
+  const assignmentCeremonialEvent = getCeremonialEvent(
     fireteamAssignment.eligibility.state,
     fireteamAssignment.state
   );
+  const promotionOrderRank =
+    promotion.pendingTransition?.toRank.name ??
+    (promotion.state === "eligible"
+      ? (promotion.targetRank?.name ?? null)
+      : null);
+  const promotionCeremonialEvent = getPromotionCeremonialEvent(
+    promotion.state,
+    promotionOrderRank
+  );
+  const ceremonialEvent =
+    assignmentCeremonialEvent ?? promotionCeremonialEvent;
   const campaignStart = "2026-06-21";
   const today = getOperationalDateKey();
   const campaignDay =

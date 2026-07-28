@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   getAssemblyHallPresentation,
   getCeremonialEvent,
+  getPromotionCeremonialEvent,
 } from "../src/lib/ceremonial-events.ts";
 
 test("does not issue ceremonial orders while eligibility is locked", () => {
@@ -57,4 +58,29 @@ test("dismisses the order only after the full assignment verifies", () => {
     getAssemblyHallPresentation("assigned", "completed").state,
     "completed"
   );
+});
+
+test("issues a zero-reward promotion order while eligible", () => {
+  const event = getPromotionCeremonialEvent("eligible", "Bronze I");
+
+  assert.equal(event?.id, "promotion-bronze-i");
+  assert.equal(event?.ceremonyType, "promotion");
+  assert.equal(event?.serviceHistoryEntryType, "Promotion");
+  assert.equal(event?.href, "/assembly-hall");
+  assert.deepEqual(event?.rewards, {
+    xp: 0,
+    readiness: 0,
+    standings: 0,
+  });
+  assert.equal(getPromotionCeremonialEvent("locked", "Bronze I"), null);
+  assert.equal(getPromotionCeremonialEvent("eligible", null), null);
+});
+
+test("keeps promotion orders visible through history recovery", () => {
+  for (const state of ["finalizing", "conflict"]) {
+    const event = getPromotionCeremonialEvent(state, "Bronze I");
+
+    assert.equal(event?.title, "Bronze I Promotion");
+    assert.equal(event?.href, "/assembly-hall");
+  }
 });

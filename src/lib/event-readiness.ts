@@ -1,9 +1,9 @@
-import {
+import type {
   EventReadinessRequirements,
   ReadinessKey,
   ReadinessScores,
   SpartanEvent,
-} from "@/data/events";
+} from "../data/events";
 
 const readinessLabels: Record<ReadinessKey, string> = {
   physical: "Physical Readiness",
@@ -12,8 +12,25 @@ const readinessLabels: Record<ReadinessKey, string> = {
   professional: "Professional Readiness",
 };
 
+export type EventReadinessFailure =
+  | {
+      code: "minimum";
+      key: ReadinessKey;
+      actual: number;
+      minimum: number;
+      message: string;
+    }
+  | {
+      code: "at-least-one";
+      keys: ReadinessKey[];
+      highestScore: number | null;
+      minimum: number;
+      message: string;
+    };
+
 export type EventReadinessEvaluation = {
   eligible: boolean;
+  failures: EventReadinessFailure[];
   unmetRequirements: string[];
 };
 
@@ -25,16 +42,24 @@ export function evaluateEventReadiness(
   requirements: EventReadinessRequirements | undefined,
   scores: ReadinessScores
 ): EventReadinessEvaluation {
-  if (!requirements) return { eligible: true, unmetRequirements: [] };
+  if (!requirements) {
+    return { eligible: true, failures: [], unmetRequirements: [] };
+  }
 
-  const unmetRequirements: string[] = [];
+  const failures: EventReadinessFailure[] = [];
 
   for (const [key, minimum] of Object.entries(requirements.minimums ?? {}) as [
     ReadinessKey,
     number,
   ][]) {
     if (scores[key] < minimum) {
-      unmetRequirements.push(`${readinessLabels[key]} must be at least ${minimum}`);
+      failures.push({
+        code: "minimum",
+        key,
+        actual: scores[key],
+        minimum,
+        message: `${readinessLabels[key]} must be at least ${minimum}`,
+      });
     }
   }
 
@@ -44,12 +69,24 @@ export function evaluateEventReadiness(
       (key) => scores[key] >= requirements.atLeastOne!.minimum
     )
   ) {
-    unmetRequirements.push(
-      `At least one of ${labelForKeys(requirements.atLeastOne.keys)} must be at least ${requirements.atLeastOne.minimum}`
-    );
+    const { keys, minimum } = requirements.atLeastOne;
+    failures.push({
+      code: "at-least-one",
+      keys,
+      highestScore:
+        keys.length > 0
+          ? Math.max(...keys.map((key) => scores[key]))
+          : null,
+      minimum,
+      message: `At least one of ${labelForKeys(keys)} must be at least ${minimum}`,
+    });
   }
 
-  return { eligible: unmetRequirements.length === 0, unmetRequirements };
+  return {
+    eligible: failures.length === 0,
+    failures,
+    unmetRequirements: failures.map(({ message }) => message),
+  };
 }
 
 export function getEventReadinessCopy(event: SpartanEvent) {

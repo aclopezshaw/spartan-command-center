@@ -4,13 +4,14 @@ import NavBar from "../../components/NavBar";
 import PageHeader from "../../components/PageHeader";
 import FireteamAssignmentCeremony from "../../components/FireteamAssignmentCeremony";
 import CampaignRolloverControl from "../../components/CampaignRolloverControl";
+import PromotionControl from "../../components/PromotionControl";
 import { getAssemblyHallPresentation } from "@/lib/ceremonial-events";
 import {
-  getAlexServiceRecord,
   getActiveCampaignEventState,
   getCampaignPhaseXpSummary,
   getCampaignRolloverStatus,
   getFireteamAssignmentStatus,
+  getPromotionStatus,
 } from "@/lib/notion";
 import { buildRankProgression } from "@/lib/rank-progression";
 
@@ -42,22 +43,12 @@ function EvidenceItem({
   );
 }
 
-function formulaNumber(
-  properties: Record<
-    string,
-    { formula?: { number?: number | null; string?: string | null } }
-  >,
-  propertyName: string
-) {
-  return properties[propertyName]?.formula?.number ?? 0;
-}
-
 export default async function AssemblyHallPage() {
-  const [assignment, rollover, serviceRecord, phaseXpSummary] =
+  const [assignment, rollover, promotion, phaseXpSummary] =
     await Promise.all([
       getFireteamAssignmentStatus(),
       getCampaignRolloverStatus(),
-      getAlexServiceRecord(),
+      getPromotionStatus(),
       getActiveCampaignEventState().then((eventState) =>
         getCampaignPhaseXpSummary(eventState)
       ),
@@ -67,40 +58,67 @@ export default async function AssemblyHallPage() {
     phaseXpSummary && phaseXpSummary.elapsedDays > 0
       ? phaseXpSummary.dailyXp / phaseXpSummary.elapsedDays
       : null;
-  const serviceProperties =
-    serviceRecord && "properties" in serviceRecord
-      ? (serviceRecord.properties as Record<
-          string,
-          {
-            formula?: {
-              number?: number | null;
-              string?: string | null;
-            };
-          }
-        >)
-      : null;
-  const rankProgression = serviceProperties
-    ? buildRankProgression({
-        currentRank:
-          serviceProperties["Calculated Rank"]?.formula?.string ?? "Recruit",
-        currentXp: formulaNumber(serviceProperties, "Service Score"),
-        nextRankXp: formulaNumber(serviceProperties, "Next Rank XP"),
-        xpToNextRank: formulaNumber(serviceProperties, "XP To Next Rank"),
-        rankProgress:
-          serviceProperties["Rank Progress %"]?.formula?.number ?? null,
+  const rankProgression =
+    promotion.currentRank && promotion.progression
+      ? buildRankProgression({
+        currentRank: promotion.currentRank.name,
+        currentXp: promotion.progression.currentXp,
         averageDailyHabitXp,
       })
     : null;
-  const presentation = getAssemblyHallPresentation(
+  const assignmentPresentation = getAssemblyHallPresentation(
     eligibility.state,
     assignment.state
   );
-  const isOrderActive = [
+  const isAssignmentOrderActive = [
     "available",
     "in_progress",
     "finalizing",
     "conflict",
   ].includes(assignment.state);
+  const promotionOrderRank =
+    promotion.pendingTransition?.toRank.name ??
+    (promotion.state === "eligible"
+      ? (promotion.targetRank?.name ?? null)
+      : null);
+  const isPromotionOrderActive =
+    promotion.state === "eligible" ||
+    promotion.state === "finalizing" ||
+    (promotion.state === "conflict" &&
+      promotion.pendingTransition !== null);
+  const isOrderActive =
+    isAssignmentOrderActive || isPromotionOrderActive;
+  const presentation = isPromotionOrderActive
+    ? {
+        eyebrow:
+          promotion.state === "finalizing"
+            ? "Promotion Record Recovery"
+            : promotion.state === "conflict"
+              ? "Promotion Record Conflict"
+              : "Promotion Orders Received",
+        title:
+          promotion.state === "finalizing"
+            ? `Reconcile ${promotionOrderRank} Promotion`
+            : `Report for ${promotionOrderRank} Promotion`,
+        summary:
+          promotion.state === "finalizing"
+            ? "The awarded rank is durable. Complete the one-time Service History reconciliation before Personnel Command clears this order."
+            : promotion.state === "conflict"
+              ? "Promotion evidence requires manual review before Personnel Command can clear this order."
+              : "Personnel Command has verified the required Service Score. ALEX-225 is authorized to accept the next conventional rank.",
+        statusLabel:
+          promotion.state === "finalizing"
+            ? "Recovery Required"
+            : promotion.state === "conflict"
+              ? "Review Required"
+              : "Promotion Authorized",
+      }
+    : assignmentPresentation;
+  const currentOrder = isPromotionOrderActive
+    ? `${promotionOrderRank} Promotion`
+    : isAssignmentOrderActive
+      ? "Fireteam Assignment"
+      : "No order issued";
 
   return (
     <main className="min-h-screen bg-black p-4 font-mono text-slate-100 sm:p-6">
@@ -175,49 +193,93 @@ export default async function AssemblyHallPage() {
                         {presentation.summary}
                       </p>
 
-                      <FireteamAssignmentCeremony
-                        initialStatus={assignment}
-                      />
+                      {isPromotionOrderActive ? (
+                        <PromotionControl initialStatus={promotion} />
+                      ) : (
+                        <FireteamAssignmentCeremony
+                          initialStatus={assignment}
+                        />
+                      )}
 
                       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                        <EvidenceItem
-                          label="Phase Boundary"
-                          value={
-                            eligibility.evidence.boundaryReached
-                              ? "Verified"
-                              : eligibility.evidence.boundaryDate ?? "Unscheduled"
-                          }
-                          complete={eligibility.evidence.boundaryReached}
-                        />
-                        <EvidenceItem
-                          label="Required Events"
-                          value={`${eligibility.evidence.eventCount - eligibility.evidence.incompleteEventTitles.length} / ${eligibility.evidence.eventCount} Complete`}
-                          complete={
-                            eligibility.evidence.eventCount > 0 &&
-                            eligibility.evidence.incompleteEventTitles.length ===
-                              0
-                          }
-                        />
-                        <EvidenceItem
-                          label="Service History"
-                          value={
-                            eligibility.evidence.eventHistoriesComplete
-                              ? "Verified"
-                              : "Review Required"
-                          }
-                          complete={
-                            eligibility.evidence.eventHistoriesComplete
-                          }
-                        />
-                        <EvidenceItem
-                          label="Final Campaign Record"
-                          value={
-                            eligibility.evidence.snapshotFinalized
-                              ? "Frozen"
-                              : "Pending"
-                          }
-                          complete={eligibility.evidence.snapshotFinalized}
-                        />
+                        {isPromotionOrderActive ? (
+                          <>
+                            <EvidenceItem
+                              label="Awarded Rank"
+                              value={
+                                promotion.currentRank?.name ?? "Conflict"
+                              }
+                              complete={Boolean(promotion.currentRank)}
+                            />
+                            <EvidenceItem
+                              label="Promotion Target"
+                              value={
+                                promotion.targetRank?.name ?? "Unconfigured"
+                              }
+                              complete={Boolean(promotion.targetRank)}
+                            />
+                            <EvidenceItem
+                              label="Service Score"
+                              value={
+                                rankProgression?.currentXp.toLocaleString() ??
+                                "Unavailable"
+                              }
+                              complete={promotion.canPromote}
+                            />
+                            <EvidenceItem
+                              label="XP Threshold"
+                              value={
+                                promotion.targetRank?.minimumXp.toLocaleString() ??
+                                "Unavailable"
+                              }
+                              complete={promotion.canPromote}
+                            />
+                          </>
+                        ) : (
+                          <>
+                            <EvidenceItem
+                              label="Phase Boundary"
+                              value={
+                                eligibility.evidence.boundaryReached
+                                  ? "Verified"
+                                  : eligibility.evidence.boundaryDate ??
+                                    "Unscheduled"
+                              }
+                              complete={eligibility.evidence.boundaryReached}
+                            />
+                            <EvidenceItem
+                              label="Required Events"
+                              value={`${eligibility.evidence.eventCount - eligibility.evidence.incompleteEventTitles.length} / ${eligibility.evidence.eventCount} Complete`}
+                              complete={
+                                eligibility.evidence.eventCount > 0 &&
+                                eligibility.evidence
+                                  .incompleteEventTitles.length === 0
+                              }
+                            />
+                            <EvidenceItem
+                              label="Service History"
+                              value={
+                                eligibility.evidence.eventHistoriesComplete
+                                  ? "Verified"
+                                  : "Review Required"
+                              }
+                              complete={
+                                eligibility.evidence.eventHistoriesComplete
+                              }
+                            />
+                            <EvidenceItem
+                              label="Final Campaign Record"
+                              value={
+                                eligibility.evidence.snapshotFinalized
+                                  ? "Frozen"
+                                  : "Pending"
+                              }
+                              complete={
+                                eligibility.evidence.snapshotFinalized
+                              }
+                            />
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -228,9 +290,7 @@ export default async function AssemblyHallPage() {
                             Current Order
                           </p>
                           <p className="mt-2 text-sm font-bold uppercase text-white">
-                            {isOrderActive
-                              ? "Fireteam Assignment"
-                              : "No order issued"}
+                            {currentOrder}
                           </p>
                         </div>
                         <span
@@ -294,16 +354,20 @@ export default async function AssemblyHallPage() {
                 </p>
                 <p
                   className={`mt-1 text-sm font-black uppercase tracking-[0.15em] ${
-                    rankProgression?.thresholdMet
+                    promotion.state === "eligible"
                       ? "text-emerald-300"
                       : "text-amber-200"
                   }`}
                 >
-                  {rankProgression?.terminalRank
-                    ? "Service Apex Reached"
-                    : rankProgression?.thresholdMet
-                      ? "Threshold Met · Review Pending"
-                      : "Hold · Criteria Not Met"}
+                  {promotion.state === "advanced_rank_pending"
+                    ? "Advanced Rank Review Pending"
+                    : promotion.state === "conflict"
+                      ? "Personnel Record Conflict"
+                      : promotion.state === "finalizing"
+                        ? "History Reconciliation Required"
+                      : promotion.state === "eligible"
+                        ? "Promotion Authorized"
+                        : "Hold · Criteria Not Met"}
                 </p>
               </div>
             </div>
@@ -370,7 +434,8 @@ export default async function AssemblyHallPage() {
                     ))}
                   </div>
 
-                  {!rankProgression.terminalRank && (
+                  {!rankProgression.terminalRank &&
+                    !rankProgression.advancedRankPending && (
                     <p className="mt-3 text-[10px] leading-5 text-slate-500">
                       {rankProgression.averageDailyHabitXp === null
                         ? "A days-to-threshold forecast will appear after the current phase records Daily SITREP habit XP."
@@ -389,26 +454,76 @@ export default async function AssemblyHallPage() {
                       <span className="text-slate-400">XP Threshold</span>
                       <span
                         className={
-                          rankProgression.thresholdMet
+                          promotion.state === "eligible" ||
+                          promotion.state === "finalizing"
                             ? "text-emerald-300"
                             : "text-amber-200"
                         }
                       >
-                        {rankProgression.thresholdMet ? "Met" : "Pending"}
+                        {promotion.state === "eligible" ||
+                        promotion.state === "finalizing"
+                          ? "Met"
+                          : "Pending"}
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-4 border-b border-cyan-950 pb-3">
                       <span className="text-slate-400">Promotion Review</span>
-                      <span className="text-slate-500">Not Issued</span>
+                      <span
+                        className={
+                          promotion.state === "eligible"
+                            ? "text-emerald-300"
+                            : "text-slate-500"
+                        }
+                      >
+                        {promotion.state === "eligible"
+                          ? "Authorized"
+                          : promotion.state === "finalizing"
+                            ? "Rank Awarded"
+                          : "Not Issued"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 border-b border-cyan-950 pb-3">
+                      <span className="text-slate-400">Service History</span>
+                      <span
+                        className={
+                          promotion.historyStatus === "verified"
+                            ? "text-emerald-300"
+                            : promotion.historyStatus === "conflict"
+                              ? "text-red-300"
+                              : promotion.historyStatus === "missing"
+                                ? "text-amber-200"
+                                : "text-slate-500"
+                        }
+                      >
+                        {promotion.historyStatus === "verified"
+                          ? "Verified"
+                          : promotion.historyStatus === "conflict"
+                            ? "Conflict"
+                            : promotion.historyStatus === "missing"
+                              ? "Reconcile"
+                              : "Not Required"}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between gap-4">
                       <span className="text-slate-400">Ceremonial Order</span>
-                      <span className="text-slate-500">Awaiting Eligibility</span>
+                      <span
+                        className={
+                          isPromotionOrderActive
+                            ? "text-amber-200"
+                            : "text-slate-500"
+                        }
+                      >
+                        {isPromotionOrderActive
+                          ? promotion.state === "finalizing"
+                            ? "Reconcile Record"
+                            : "Report to Hall"
+                          : "Awaiting Eligibility"}
+                      </span>
                     </div>
                   </div>
                   <p className="mt-5 text-[10px] leading-5 text-slate-500">
-                    The Assembly Hall will issue the formal promotion order only
-                    after the authoritative promotion review is connected.
+                    {promotion.reasons[0] ??
+                      "The awarded Current Rank and Service Score have been verified against the conventional progression ladder."}
                   </p>
                 </aside>
               </div>

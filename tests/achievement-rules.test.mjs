@@ -83,3 +83,40 @@ test("weekly streak uses seven-day operational week keys", () => {
     3
   );
 });
+
+test("Persistence totals remain correct above one Notion page", () => {
+  const achievement = { track: "Persistence", reqValue: 101 };
+
+  assert.equal(
+    isAchievementEarned(achievement, {
+      totalCompletions: 101,
+      currentStreak: 0,
+    }),
+    true
+  );
+});
+
+test("Discipline streaks remain correct above one Notion page", () => {
+  const completedDates = Array.from(
+    { length: 101 },
+    (_, index) => {
+      const date = new Date(Date.UTC(2026, 6, 27 - index, 12));
+      return date.toISOString().slice(0, 10);
+    }
+  );
+
+  assert.equal(
+    calculateDailyAchievementStreak(
+      completedDates,
+      "2026-07-27"
+    ),
+    101
+  );
+  assert.equal(
+    isAchievementEarned(
+      { track: "Discipline", reqValue: 101 },
+      { totalCompletions: 101, currentStreak: 101 }
+    ),
+    true
+  );
+});

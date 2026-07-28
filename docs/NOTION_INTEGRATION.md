@@ -49,6 +49,7 @@ This table documents names and roles, never values.
 | --- | --- | --- |
 | `NOTION_TOKEN` | Server-side Notion SDK authentication | `getNotionClient` in [`src/lib/notion-client.ts`](../src/lib/notion-client.ts) |
 | `SERVICE_RECORD_DATA_SOURCE_ID` | Query ALEX-225's Service Record and persist progression state | `getAlexServiceRecordPageId` and related helpers in [`src/lib/notion.ts`](../src/lib/notion.ts) |
+| `RANK_PROGRESSION_DATA_SOURCE_ID` | Optional explicit target used when the rank migration must create a missing `Current Rank` relation; existing relations are discovered directly | [`scripts/migrate-rank-progression-schema.mjs`](../scripts/migrate-rank-progression-schema.mjs) |
 | `SERVICE_HISTORY_DATABASE_ID` | Retrieve Service History metadata and create history records | Service History helpers in [`src/lib/notion.ts`](../src/lib/notion.ts) |
 | `EVENTS_DATABASE_ID` | Query authoritative Event records as a data source | Campaign Event helpers in [`src/lib/notion.ts`](../src/lib/notion.ts) |
 | `DAILY_SITREP_DATA_SOURCE_ID` | Query and update Daily SITREP records | SITREP helpers in [`src/lib/notion.ts`](../src/lib/notion.ts) and [`src/lib/achievements.ts`](../src/lib/achievements.ts) |
@@ -65,17 +66,22 @@ This table documents names and roles, never values.
 
 Some workflows discover related data sources from Notion relations instead of
 requiring another environment variable. Campaign Operations is resolved from
-authoritative Event relations in `getActiveCampaignEventState`.
+authoritative Event relations in `getActiveCampaignEventState`. Notion omits a
+relation property from API schema responses when its target data source is not
+shared with the calling integration. Rank Progression must therefore be shared
+with the `Alex's Spartan Command Center` integration before promotion reads or
+the rank-progression migration can succeed.
 
 ## Read and write flows
 
 | Domain | Reads | Writes | Current status |
 | --- | --- | --- | --- |
-| Daily SITREP | Server page and shared helpers query the Denver-dated record | Authenticated checkbox routes update allowlisted properties and may reconcile achievements and Unit Cohesion | Implemented with documented concurrency debt |
-| Weekly Operations | Shared helpers query or create the current Sunday-start record and repair its canonical `🪖 Service Record` relation to ALEX-225 | Authenticated route updates allowlisted weekly properties and may reconcile achievements and Unit Cohesion | Implemented with documented concurrency debt |
+| Daily SITREP | Server page and shared helpers query the Denver-dated record | Authenticated checkbox routes update allowlisted properties and reconcile Unit Cohesion before returning; checked objectives schedule achievement work through Next.js `after()` | Implemented with post-response achievement processing |
+| Weekly Operations | Shared helpers query or create the current Sunday-start record and repair its canonical `🪖 Service Record` relation to ALEX-225 | Authenticated route updates allowlisted weekly properties and reconciles Unit Cohesion before returning; checked objectives schedule achievement work through Next.js `after()` | Implemented with post-response achievement processing |
+| Achievements | `collectNotionPages` exhausts every cursor for earned and unearned definitions plus qualifying Daily SITREP or Weekly Operations evidence; shared readiness totals read Notion number, formula, and rollup values | A 60-second post-response callback runs a process-local single-flight evaluation, dates newly earned definitions, re-reads formula awards, reconciles operation-keyed readiness history, and repairs interrupted history writes; an explicit endpoint remains synchronous for manual evaluation | Partially implemented because Classified evaluation remains unsupported and cross-instance coalescing is unavailable |
 | Campaign Events | Event helpers query active-phase schedules, requirements, retry state, and related history | Authenticated completion route persists failure/retry state or recoverable event, standings, and history completion | Partially implemented |
 | Campaign rollover | Shared helpers read phase, event, habit, and history evidence | Authenticated explicit rollover freezes the phase result, reconciles history, and updates phase lifecycle state | Implemented with Notion transaction constraints |
-| Service Record | Server pages and progression helpers query ALEX-225's canonical row | Progression and assignment workflows update versioned eligibility, assignment, and relationship fields | Partially implemented |
+| Service Record | Server pages and progression helpers query ALEX-225's canonical row; Promotion resolves Rank Progression through the `Current Rank` relation and queries the exact prior-to-current Promotion history | Progression and assignment workflows update versioned eligibility, assignment, and relationship fields; authenticated Promotion advances at most one verified `Current Rank` relation and reconciles one linked zero-reward Promotion history row | Implemented with Notion transaction and distributed-uniqueness constraints |
 | Hydration and workouts | Authenticated routes and shared helpers aggregate current operational records | Authenticated reports create validated records | Partially implemented |
 | Academic Operations | Authenticated SMU routes query assignments and quarter metadata and attempt to resolve related course codes and names when the application integration can access the Courses data source; the client aggregates cumulative completed, required, reading, worksheet, and high-priority assignment counts. Reading and worksheet counts are derived from standalone labels in assignment titles. | Completion and Focus Queue routes update verified assignment pages | Partially implemented |
 | Intel Reports | The authenticated materials route paginates the complete Archive and Reading Reports, partitions Active titles with their latest Book-linked report dates, and returns every eligible Priority Band record plus at most five highest-Fit-Score priority/Wishlist records with deduplication; the client re-queries after successful submission | The absolute `pageReadTo` contract creates a deterministic Book-linked Reading Report, then updates Archive Current Page; a retry can reconcile an existing report with an interrupted page update | Partially implemented because Notion cannot make the Reading Report and Archive updates transactional |
@@ -90,6 +96,16 @@ Canonical Campaign Operations and Service Record fields are defined in
 [`NOTION_SCHEMA_CONTRACTS.md`](NOTION_SCHEMA_CONTRACTS.md). The idempotent core
 schema migration is
 [`scripts/migrate-notion-core-schemas.mjs`](../scripts/migrate-notion-core-schemas.mjs).
+The additive durable-rank relation and ALEX-225 initialization are owned by
+[`scripts/migrate-rank-progression-schema.mjs`](../scripts/migrate-rank-progression-schema.mjs);
+`--dry-run` reports whether the relation or initial Recruit assignment would
+change, and normal execution verifies the relation target and single-rank
+invariant.
+The additive readiness attribution schema and historical achievement backfill
+are owned by
+[`scripts/migrate-readiness-ledger.mjs`](../scripts/migrate-readiness-ledger.mjs);
+`--dry-run` inventories its exact changes before mutation and the completed run
+verifies operation uniqueness plus category totals.
 
 When changing a live schema:
 

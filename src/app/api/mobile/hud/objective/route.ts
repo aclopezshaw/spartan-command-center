@@ -3,7 +3,7 @@ import {
   getTodaySitrep,
   updateDailySitrepCheckbox,
 } from "@/lib/notion";
-import { evaluateAchievements } from "@/lib/achievements";
+import { scheduleAchievementEvaluation } from "@/lib/achievement-evaluation";
 import { hasAuthorizedSession } from "@/lib/auth";
 
 const OBJECTIVE_TO_SITREP_PROPERTY: Record<string, string> = {
@@ -17,6 +17,8 @@ const OBJECTIVE_TO_SITREP_PROPERTY: Record<string, string> = {
   meds: "Meds",
   read: "Read",
 };
+
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   if (!(await hasAuthorizedSession())) {
@@ -49,10 +51,8 @@ export async function POST(request: Request) {
 
   await updateDailySitrepCheckbox(todaySitrep.id, propertyName, completed);
 
-  let awarded: string[] = [];
-
   if (completed) {
-    awarded = await evaluateAchievements();
+    scheduleAchievementEvaluation();
   }
 
   return NextResponse.json({
@@ -60,6 +60,9 @@ export async function POST(request: Request) {
     objective: id,
     propertyName,
     completed,
-    awarded,
+    awarded: [],
+    achievementEvaluation: completed
+      ? "scheduled"
+      : "not_requested",
   });
 }

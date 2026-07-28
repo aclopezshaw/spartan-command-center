@@ -80,7 +80,7 @@ Each row represents one Spartan designation.
 | `Designation` | Title | Stable personnel identity. |
 | `Service Status` | Select | Concise personnel state: `Active Duty`, `Retired`, or `MIA`. |
 | `Current Campaign` | Relation | Current Campaign Operations phase pointer. |
-| `Current Rank` | Relation | Rank record pointer retained for rank-system integration. |
+| `Current Rank` | Relation | Durable awarded-rank authority. Promotion eligibility compares this one related Rank Progression record with lifetime `Service Score`; formula-derived rank labels do not prove ceremony completion. |
 
 Manual count fields, the duplicate `Service Record` prose field, lore-only
 notes, and the unsupported Shield placeholder were removed. Counts and future
@@ -95,7 +95,7 @@ Shield state must be derived or introduced by their owning systems.
 | `Habit XP Earned` | Formula | Daily plus Weekly XP. |
 | `Service History XP` | Rollup | XP awarded by linked Service History. |
 | `Service Score` | Formula | Habit XP plus Service History XP; authoritative lifetime XP. |
-| `Calculated Rank` | Formula | Rank derived from `Service Score`. |
+| `Calculated Rank` | Formula | Informational rank projection derived from `Service Score`; not the awarded-rank or ceremony-completion authority. |
 | `Next Rank XP` | Formula | Next threshold derived from `Service Score`. |
 | `XP To Next Rank` | Formula | Next threshold minus `Service Score`. |
 | `Rank Progress %` | Formula | `Service Score` progress toward the next threshold. |
@@ -104,6 +104,42 @@ The former campaign-day, campaign-progress, medal-pace, projected-XP, maximum-XP
 and threshold mirrors were removed from Service Record. Campaign presentation
 uses the current Campaign Operations record and repository phase-XP calculator,
 which includes the actual event catalog rather than hard-coded reward constants.
+
+### Promotion Service History
+
+Every awarded conventional rank above Recruit requires exactly one linked
+Service History row whose entry type is `Promotion`. The canonical title is
+`Promotion — {prior rank} to {new rank}`; `Date` records durable ceremony
+completion, XP is `0`, readiness is `None`, and the description preserves both
+rank names. The row relates only to ALEX-225's Service Record because rank is
+lifetime progression rather than phase-scoped Campaign XP. Missing history is
+recoverable finalization; duplicate or malformed evidence is a conflict and
+must not be silently normalized.
+
+### Readiness attribution Service History
+
+Achievement rollups on Service Record remain authoritative for current
+Physical, Recovery, Intelligence, and Professional totals. Every earned
+achievement that changes one of those totals must also have exactly one linked,
+zero-XP Achievement Service History row with:
+
+| Property | Type | Contract |
+| --- | --- | --- |
+| `Readiness Category` | Select | One of Physical, Recovery, Intelligence, or Professional. |
+| `Readiness Delta` | Number | Exact signed change contributed by the source record. Achievement awards are positive; the signed contract supports future explicit corrections. |
+| `Readiness Operation ID` | Rich text | Stable idempotency key: `readiness:achievement:{achievement page ID}:{category}:v1`. |
+| `Readiness Source Type` | Select | `Achievement` for this implemented workflow; reserved options support later Event, Campaign, Promotion, System, or Manual attribution. |
+| `Readiness Source ID` | Rich text | Exact source page ID. |
+| `Date` | Date | Operational award date. |
+| `Description` | Rich text | Human-readable reason copied from the achievement definition. |
+| `Related Achievement` | Relation | Exact achievement source. |
+| `Related Service Record` | Relation | ALEX-225. |
+
+The ledger is explanatory evidence rather than a second mutable total.
+`getReadinessLedgerStatus` sums every signed delta, detects duplicate operation
+IDs or malformed records, and requires equality with the authoritative
+achievement rollups. Missing history is recoverable finalization; duplicate
+history is a conflict.
 
 ### Required relations and progression state
 

@@ -49,7 +49,7 @@ function evaluate(overrides = {}) {
     phases: [phaseOne, phaseTwo],
     events: completedEvents,
     operationalDate: "2026-08-02",
-    historyExists: false,
+    historyRecordCount: 0,
     ...overrides,
   });
 }
@@ -103,7 +103,7 @@ test("reports the normal transition as ready", () => {
 });
 
 test("reports history-only partial application as recovery", () => {
-  const result = evaluate({ historyExists: true });
+  const result = evaluate({ historyRecordCount: 1 });
 
   assert.equal(result.eligible, true);
   assert.equal(result.state, "recovery");
@@ -115,7 +115,7 @@ test("recovers when the outgoing phase was completed before activation", () => {
       { ...phaseOne, phaseStatus: "Complete" },
       phaseTwo,
     ],
-    historyExists: true,
+    historyRecordCount: 1,
   });
 
   assert.equal(result.eligible, true);
@@ -128,7 +128,7 @@ test("recovers when the incoming phase was activated first", () => {
       phaseOne,
       { ...phaseTwo, phaseStatus: "Active" },
     ],
-    historyExists: true,
+    historyRecordCount: 1,
   });
 
   assert.equal(result.eligible, true);
@@ -141,7 +141,7 @@ test("recognizes a fully verified rollover", () => {
       { ...phaseOne, phaseStatus: "Complete" },
       { ...phaseTwo, phaseStatus: "Active" },
     ],
-    historyExists: true,
+    historyRecordCount: 1,
   });
 
   assert.equal(result.eligible, true);
@@ -154,7 +154,7 @@ test("switches the Day 1 HUD to the incoming Phase II daypart suite", () => {
       { ...phaseOne, phaseStatus: "Complete" },
       { ...phaseTwo, phaseStatus: "Active" },
     ],
-    historyExists: true,
+    historyRecordCount: 1,
   });
   const activePhaseName = result.transition?.target.phaseName;
 
@@ -175,6 +175,14 @@ test("switches the Day 1 HUD to the incoming Phase II daypart suite", () => {
     getHudBackground(activePhaseName, 22),
     "/images/hud/phase-ii-fireteam-room-night.png"
   );
+});
+
+test("blocks duplicate campaign transition histories", () => {
+  const result = evaluate({ historyRecordCount: 2 });
+
+  assert.equal(result.eligible, false);
+  assert.equal(result.state, "blocked");
+  assert.match(result.reasons[0], /multiple campaign service history/i);
 });
 
 test("blocks an outgoing phase with no authoritative events", () => {

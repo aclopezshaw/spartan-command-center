@@ -17,7 +17,116 @@ export type AchievementServiceHistoryInput = {
   description?: string;
   earnedAt: string;
   serviceRecordPageId?: string | null;
+  readinessDelta?: number;
+  readinessOperationId?: string;
 };
+
+export type PromotionServiceHistoryInput = {
+  fromRank: string;
+  toRank: string;
+  promotedAt: string;
+  serviceRecordPageId: string;
+};
+
+export type CampaignTransitionServiceHistoryInput = {
+  title: string;
+  campaignDay: number;
+  completedAt: string;
+  campaignName: string;
+  sourcePhaseName: string;
+  targetPhaseName: string;
+  earnedXp: number;
+  medalEarned: string;
+  campaignPageId: string;
+  serviceRecordPageId?: string | null;
+};
+
+export function getPromotionHistoryTitle(
+  fromRank: string,
+  toRank: string
+) {
+  return `Promotion — ${fromRank} to ${toRank}`;
+}
+
+export function getPromotionHistoryDescription(
+  fromRank: string,
+  toRank: string
+) {
+  return `ALEX-225 completed an Assembly Hall promotion ceremony and advanced from ${fromRank} to ${toRank}.`;
+}
+
+export function buildPromotionServiceHistoryProperties(
+  input: PromotionServiceHistoryInput
+) {
+  return {
+    Title: {
+      title: [
+        {
+          text: {
+            content: getPromotionHistoryTitle(
+              input.fromRank,
+              input.toRank
+            ),
+          },
+        },
+      ],
+    },
+    Date: { date: { start: input.promotedAt } },
+    "Campaign Day": { number: null },
+    "Entry Type": { select: { name: "Promotion" } },
+    "XP Awarded": { number: 0 },
+    "Readiness Category": { select: { name: "None" } },
+    Description: {
+      rich_text: [
+        {
+          text: {
+            content: getPromotionHistoryDescription(
+              input.fromRank,
+              input.toRank
+            ),
+          },
+        },
+      ],
+    },
+    "Related Service Record": {
+      relation: [{ id: input.serviceRecordPageId }],
+    },
+  };
+}
+
+export function buildCampaignTransitionServiceHistoryProperties(
+  input: CampaignTransitionServiceHistoryInput
+) {
+  return {
+    Title: {
+      title: [{ text: { content: input.title } }],
+    },
+    Date: { date: { start: input.completedAt } },
+    "Campaign Day": { number: input.campaignDay || null },
+    "Entry Type": { select: { name: "Campaign" } },
+    "XP Awarded": { number: 0 },
+    "Readiness Category": { select: { name: "None" } },
+    Description: {
+      rich_text: [
+        {
+          text: {
+            content: `${input.campaignName} ${input.sourcePhaseName} completed with ${input.earnedXp} XP and a ${input.medalEarned} campaign medal. ${input.targetPhaseName} activated.`,
+          },
+        },
+      ],
+    },
+    "Related Campaign": {
+      relation: [{ id: input.campaignPageId }],
+    },
+    ...(input.serviceRecordPageId
+      ? {
+          "Related Service Record": {
+            relation: [{ id: input.serviceRecordPageId }],
+          },
+        }
+      : {}),
+  };
+}
 
 export function buildCampaignServiceHistoryProperties(
   input: CampaignServiceHistoryInput
@@ -106,6 +215,33 @@ export function buildAchievementServiceHistoryProperties(
     "Related Achievement": {
       relation: [{ id: input.achievementPageId }],
     },
+    ...(input.readinessDelta !== undefined &&
+    input.readinessOperationId
+      ? {
+          "Readiness Delta": {
+            number: input.readinessDelta,
+          },
+          "Readiness Operation ID": {
+            rich_text: [
+              {
+                text: {
+                  content: input.readinessOperationId,
+                },
+              },
+            ],
+          },
+          "Readiness Source Type": {
+            select: { name: "Achievement" },
+          },
+          "Readiness Source ID": {
+            rich_text: [
+              {
+                text: { content: input.achievementPageId },
+              },
+            ],
+          },
+        }
+      : {}),
     ...(input.serviceRecordPageId
       ? {
           "Related Service Record": {

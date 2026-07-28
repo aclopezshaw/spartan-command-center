@@ -2,30 +2,20 @@ import {
     getActiveCampaignEventState,
     getAlexServiceRecord,
     getCampaignPhaseXpSummary,
+    getPromotionStatus,
+    getReadinessLedgerStatus,
 } from "@/lib/notion";
 import { getCampaignPhaseDisplayName } from "@/lib/campaign";
+import { getOperationalDateKey } from "@/lib/date";
 import { getNotionClient } from "@/lib/notion-client";
+import {
+    calculateReadinessTrends,
+    type ReadinessTrend,
+} from "@/lib/readiness-ledger";
+import { getRankInsigniaPath } from "@/lib/rank-insignia";
 import Image from "next/image";
 import NavBar from "../../components/NavBar";
 import PageHeader from "../../components/PageHeader";
-
-function getNumberProperty(properties: any, propertyName: string) {
-    const property = properties[propertyName];
-
-    if (!property) return 0;
-
-    if (property.type === "number") return property.number ?? 0;
-
-    if (property.type === "formula" && property.formula.type === "number") {
-        return property.formula.number ?? 0;
-    }
-
-    if (property.type === "rollup" && property.rollup.type === "number") {
-        return property.rollup.number ?? 0;
-    }
-
-    return 0;
-}
 
 function getTitleProperty(properties: any, propertyName: string) {
     return properties[propertyName]?.title?.[0]?.plain_text ?? "";
@@ -201,13 +191,58 @@ function getPendingPaceMarkers({
         }));
 }
 
-function StatCard({ label, value }: { label: string; value: number | string }) {
+function formatTrendPoints(value: number) {
+    return `${value >= 0 ? "+" : ""}${value}`;
+}
+
+function StatCard({
+    label,
+    value,
+    trend,
+}: {
+    label: string;
+    value: number | string;
+    trend: ReadinessTrend;
+}) {
+    const trendPresentation = {
+        up: {
+            arrow: "↑",
+            label: "Up",
+            className: "text-cyan-400",
+        },
+        flat: {
+            arrow: "→",
+            label: "Flat",
+            className: "text-slate-500",
+        },
+        down: {
+            arrow: "↓",
+            label: "Down",
+            className: "text-amber-400/80",
+        },
+    }[trend.direction];
+    const trendDescription = `${trendPresentation.label}: ${formatTrendPoints(
+        trend.currentPoints
+    )} points in the current ${trend.windowDays} days versus ${formatTrendPoints(
+        trend.previousPoints
+    )} in the prior ${trend.windowDays} days`;
+
     return (
         <div className="border border-cyan-700/50 bg-slate-950/80 p-4 text-center">
             <p className="text-xs uppercase tracking-[0.25em] text-cyan-400">
                 {label}
             </p>
             <p className="mt-3 text-3xl font-bold text-slate-300">{value}</p>
+            <p
+                aria-label={trendDescription}
+                className={`mt-2 text-[10px] font-bold uppercase tracking-[0.18em] ${trendPresentation.className}`}
+                title={trendDescription}
+            >
+                <span aria-hidden="true" className="text-sm">
+                    {trendPresentation.arrow}
+                </span>{" "}
+                {trendPresentation.label} · 7D
+            </p>
         </div>
     );
 }
@@ -284,18 +319,6 @@ function SpartanRenderPanel() {
     );
 }
 
-function getNextRankXp(xp: number) {
-    const thresholds = [
-        8000, 16000, 24000, 32000, 40000, 48000,
-        56500, 65000, 73500, 82000, 90500, 99000,
-        108000, 117000, 126000, 135000, 144000, 153000,
-        162500, 172000, 181500, 191000, 200500, 210000,
-        220000, 230000, 240000, 250000, 260000, 270000,
-    ];
-
-    return thresholds.find((threshold) => xp < threshold) ?? 270000;
-}
-
 function getCampaignMedalPace(
     projectedXp: number,
     bronzeThresholdXp: number,
@@ -321,27 +344,30 @@ export default async function Home() {
     const phaseXpSummary = await getCampaignPhaseXpSummary(
         activeCampaignEventState
     );
+    const promotion = await getPromotionStatus();
+    const readinessLedger = await getReadinessLedgerStatus();
+    const readiness = readinessLedger.authoritativeTotals;
+    const readinessTrends = calculateReadinessTrends({
+        entries: readinessLedger.entries,
+        currentDateKey: getOperationalDateKey(),
+    });
 
 const properties = (freshRecord as any).properties;
 
-    const props = (record as any).properties;
-
     const spartan = {
         designation: properties["Designation"]?.title?.[0]?.plain_text ?? "ALEX-225",
-        rank: properties["Calculated Rank"]?.formula?.string ?? "BANANA",
+        rank: promotion.currentRank?.name ?? "Rank Conflict",
+        nextRank: promotion.targetRank?.name ?? null,
         xp: properties["Service Score"]?.formula?.number ?? 0,
-        nextRankXp: getNextRankXp(properties["Service Score"]?.formula?.number ?? 0),
-        readiness: {
-            physical: getNumberProperty(properties, "Physical Readiness"),
-            recovery: getNumberProperty(properties, "Recovery Readiness"),
-            intelligence: getNumberProperty(properties, "Intelligence Readiness"),
-            professional: getNumberProperty(properties, "Professional Readiness"),
-        },
+        nextRankXp:
+            promotion.targetRank?.minimumXp ??
+            promotion.currentRank?.minimumXp ??
+            0,
+        readiness,
 
     };
 
-    const xpProgress = Math.round((spartan.xp / spartan.nextRankXp) * 100);
-    const xpToNextRank = spartan.nextRankXp - spartan.xp;
+    const xpProgress = promotion.progression?.progressPercent ?? 0;
     const campaignXp = phaseXpSummary?.earnedXp ?? spartan.xp;
     const phaseOwnedMaxXp =
         (activeCampaignEventState.maxHabitXp ?? 0) +
@@ -444,29 +470,9 @@ const properties = (freshRecord as any).properties;
                 earned: getDateProperty(achievementProps, "Date Earned"),
                 description: getTextProperty(achievementProps, "Description"),
                 image: getTextProperty(achievementProps, "Patch Path"),
-                physicalPoints: getNumberProperty(achievementProps, "Physical Point"),
-                recoveryPoints: getNumberProperty(achievementProps, "Recovery Point"),
-                intelligencePoints: getNumberProperty(achievementProps, "Intelligence Point"),
-                professionalPoints: getNumberProperty(achievementProps, "Professional Point")
             };
         });
     }
-
-    const readinessTotals = achievements.reduce(
-    (totals, achievement: any) => ({
-        physical: totals.physical + (achievement.physicalPoints ?? 0),
-        recovery: totals.recovery + (achievement.recoveryPoints ?? 0),
-        intelligence: totals.intelligence + (achievement.intelligencePoints ?? 0),
-        professional: totals.professional + (achievement.professionalPoints ?? 0),
-    }),
-    {
-        physical: 0,
-        recovery: 0,
-        intelligence: 0,
-        professional: 0,
-    }
-);
-spartan.readiness = readinessTotals;
 
     return (
         <main className="min-h-screen bg-black p-6 font-mono text-slate-100">
@@ -538,18 +544,22 @@ spartan.readiness = readinessTotals;
                                 <StatCard
                                     label="Physical"
                                     value={spartan.readiness.physical}
+                                    trend={readinessTrends.physical}
                                 />
                                 <StatCard
                                     label="Recovery"
                                     value={spartan.readiness.recovery}
+                                    trend={readinessTrends.recovery}
                                 />
                                 <StatCard
                                     label="Intelligence"
                                     value={spartan.readiness.intelligence}
+                                    trend={readinessTrends.intelligence}
                                 />
                                 <StatCard
                                     label="Professional"
                                     value={spartan.readiness.professional}
+                                    trend={readinessTrends.professional}
                                 />
                             </section>
 
@@ -561,15 +571,17 @@ spartan.readiness = readinessTotals;
                                         </p>
 
                                         <p className="mt-2 text-2xl font-bold text-cyan-100">
-                                            Recruit
+                                            {spartan.rank}
                                         </p>
                                     </div>
 
                                     <div className="relative mx-auto h-28 w-32 sm:h-24">
                                         <div className="absolute inset-x-5 top-7 h-20 rounded-full bg-cyan-400/15 blur-2xl" />
                                         <Image
-                                            src="/images/ranks/bronze-i.png"
-                                            alt="Bronze I rank insignia"
+                                            src={getRankInsigniaPath(
+                                                spartan.nextRank ?? spartan.rank
+                                            )}
+                                            alt={`${spartan.nextRank ?? spartan.rank} rank insignia`}
                                             width={128}
                                             height={128}
                                             className="absolute left-0 top-2 z-10 h-32 w-32 object-contain drop-shadow-[0_0_14px_rgba(34,211,238,0.32)]"
@@ -581,7 +593,7 @@ spartan.readiness = readinessTotals;
                                             NEXT RANK
                                         </p>
                                         <p className="mt-2 text-2xl font-bold text-amber-500">
-                                            Bronze I
+                                            {spartan.nextRank ?? "Advanced Review"}
                                         </p>
                                     </div>
                                 </div>

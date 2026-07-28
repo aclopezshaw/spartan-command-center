@@ -142,6 +142,7 @@ export async function POST(request: Request) {
             retryAvailableDay === null
               ? "Event failed readiness review. No retry days remain in this phase."
               : `Event failed readiness review. Retry authorized on Campaign Day ${retryAvailableDay}.`,
+          readinessEvaluation: evaluation,
           unmetRequirements: evaluation.unmetRequirements,
           eventStatus: "Failed",
           retryAvailableDay,

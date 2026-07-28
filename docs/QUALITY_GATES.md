@@ -34,12 +34,17 @@ The checked-in Node harness covers:
 
 - signed-session integrity and private Route Handler authorization;
 - America/Denver date, week, and DST boundaries;
-- campaign rollover, phase XP, event scheduling, and event completion;
+- campaign rollover, phase XP, typed event-readiness boundaries, event scheduling, and event completion;
 - event failure, campaign-day cooldown, retry-ready, terminal-failed, missed, and phase-complete outcomes;
 - Individual completion eligibility and Fireteam assignment recovery;
-- ceremonial presentation, Unit Cohesion, Fireteam standings, and Phase II HUD rollover;
-- Persistence and Discipline achievement threshold/streak rules;
-- campaign and achievement Service History property contracts;
+- ceremonial presentation, conventional Promotion eligibility boundaries, Unit Cohesion, Fireteam standings, and Phase II HUD rollover;
+- the complete 38-asset rank-insignia naming, dimensions, and RGBA contract;
+- Persistence and Discipline achievement threshold/streak rules, including Notion cursor traversal and totals or streaks beyond 100 records;
+- post-response achievement scheduling on every habit mutation route plus single-flight success, overlap, failure, and recovery behavior;
+- event, campaign-transition, promotion, and operation-keyed readiness Service History property contracts, including duplicate campaign-history rejection;
+- Service History record-family classification, URL-filter validation, readiness reversals, counts, and unknown-type fallback;
+- signed readiness-ledger arithmetic, duplicate-operation detection, and authoritative-total reconciliation;
+- readiness trend window boundaries, current-versus-prior velocity direction, and exclusion of older or future entries;
 - the lint-ratchet comparison policy itself.
 
 The suites exercise pure domain rules and serialized Notion property contracts.
@@ -65,7 +70,9 @@ Never raise or regenerate the baseline merely to make a change pass.
 
 ## Scope boundary
 
-The v0.6 gate verifies implemented Individual completion eligibility. The
-authoritative Promotion Engine and promotion ceremonies remain separate planned
-0.6.2 work and must add their own coverage before being described as
-implemented.
+The v0.6 gate verifies Individual completion eligibility plus the conventional
+Promotion evaluator, zero-reward summons, exact Promotion Service History
+payload, missing-history recovery, verified-history continuation, and
+duplicate or malformed-history conflicts. Live Notion relation resolution,
+rank/history writes, and exact retry behavior still require deployment smoke
+testing.
