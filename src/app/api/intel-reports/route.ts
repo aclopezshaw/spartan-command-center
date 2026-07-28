@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getNotionClient } from "@/lib/notion-client";
+import { resolveNotionDataSourceId } from "@/lib/notion-data-source";
 import { hasAuthorizedSession } from "@/lib/auth";
 import {
   buildIntelReportProperties,
@@ -79,22 +80,6 @@ function getArchiveBook(page: ArchivePage, archiveDataSourceId: string) {
   };
 }
 
-async function getReadingReportsDataSourceId(databaseId: string) {
-  const notion = getNotionClient();
-  const database = await notion.databases.retrieve({
-    database_id: databaseId,
-  });
-  const dataSourceId = (
-    database as unknown as { data_sources?: Array<{ id: string }> }
-  ).data_sources?.[0]?.id;
-
-  if (!dataSourceId) {
-    throw new Error("Reading Reports data source not found");
-  }
-
-  return dataSourceId;
-}
-
 export async function POST(request: Request) {
   if (!(await hasAuthorizedSession())) {
     return NextResponse.json(
@@ -136,7 +121,10 @@ export async function POST(request: Request) {
       pageReadTo
     );
     const reportsDataSourceId =
-      await getReadingReportsDataSourceId(reportsDatabaseId);
+      await resolveNotionDataSourceId(
+        notion,
+        reportsDatabaseId
+      );
     const matchingReports = await notion.dataSources.query({
       data_source_id: reportsDataSourceId,
       filter: {

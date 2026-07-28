@@ -92,6 +92,11 @@ The same route follows every Reading Reports cursor and reduces Book relations t
 their latest Date. Active Material cards receive that nullable timestamp and
 re-fetch it together with Archive progress after a successful report.
 
+Reading Reports configuration accepts either the parent database ID or the
+underlying data-source ID. `src/lib/notion-data-source.ts` verifies a configured
+data-source ID directly and falls back to resolving the first source from a
+database ID, keeping both Intel routes on the same Notion API contract.
+
 ## Authentication and authorization
 
 [ADR-0008](adr/0008-signed-single-user-sessions.md) records the current single-user session boundary.

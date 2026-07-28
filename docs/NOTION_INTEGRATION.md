@@ -61,7 +61,7 @@ This table documents names and roles, never values.
 | `ASSIGNMENTS_DATA_SOURCE_ID` | Query, validate, and update Academic Operations assignments | Route Handlers under [`src/app/api/smu`](../src/app/api/smu) |
 | `ACADEMIC_QUARTERS_DATA_SOURCE_ID` | Query active and upcoming academic-quarter metadata | `getAcademicQuarterState` in [`src/lib/notion.ts`](../src/lib/notion.ts) |
 | `ARCHIVES_DATABASE_ID` | Query active reading records through the current Intel route | [`src/app/api/intel-books/route.ts`](../src/app/api/intel-books/route.ts) |
-| `READING_REPORTS_DATABASE_ID` | Create Reading Report records | [`src/app/api/intel-reports/route.ts`](../src/app/api/intel-reports/route.ts) |
+| `READING_REPORTS_DATABASE_ID` | Query and create Reading Report records; accepts either the database ID or its data-source ID | [`src/lib/notion-data-source.ts`](../src/lib/notion-data-source.ts), [`src/app/api/intel-reports/route.ts`](../src/app/api/intel-reports/route.ts) |
 
 Some workflows discover related data sources from Notion relations instead of
 requiring another environment variable. Campaign Operations is resolved from

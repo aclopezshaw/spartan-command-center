@@ -5,6 +5,7 @@ import {
   type ArchiveMaterial,
 } from "@/lib/archive-materials";
 import { getNotionClient } from "@/lib/notion-client";
+import { resolveNotionDataSourceId } from "@/lib/notion-data-source";
 
 type NotionTextProperty = {
   type?: string;
@@ -132,22 +133,6 @@ async function getAllArchiveMaterials(
   return materials;
 }
 
-async function getReadingReportsDataSourceId(databaseId: string) {
-  const notion = getNotionClient();
-  const database = await notion.databases.retrieve({
-    database_id: databaseId,
-  });
-  const dataSourceId = (
-    database as unknown as { data_sources?: Array<{ id: string }> }
-  ).data_sources?.[0]?.id;
-
-  if (!dataSourceId) {
-    throw new Error("Reading Reports data source not found");
-  }
-
-  return dataSourceId;
-}
-
 async function getLastReadDates(dataSourceId: string) {
   const notion = getNotionClient();
   const lastReadByBookId = new Map<string, string>();
@@ -220,7 +205,10 @@ export async function GET() {
 
   try {
     const reportsDataSourceId =
-      await getReadingReportsDataSourceId(reportsDatabaseId);
+      await resolveNotionDataSourceId(
+        getNotionClient(),
+        reportsDatabaseId
+      );
     const lastReadByBookId =
       await getLastReadDates(reportsDataSourceId);
     const materials = await getAllArchiveMaterials(
