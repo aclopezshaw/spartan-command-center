@@ -1,3 +1,4 @@
+import Image from "next/image";
 import NavBar from "../../components/NavBar";
 import PageHeader from "../../components/PageHeader";
 import {
@@ -14,6 +15,7 @@ import {
   type ServiceHistoryFilter,
 } from "@/lib/service-history-view";
 import Link from "next/link";
+import { getServiceHistoryInsignia } from "@/lib/personnel-insignia";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -194,6 +196,7 @@ export default async function ServiceHistoryPage({
               <div className="mt-5 space-y-3">
                 {visibleHistory.map((entry) => {
                   const category = getServiceHistoryCategory(entry);
+                  const insignia = getServiceHistoryInsignia(entry);
                   const theme =
                     entry.readinessPoints !== 0
                       ? readinessColor(entry.readinessCategory)
@@ -205,19 +208,30 @@ export default async function ServiceHistoryPage({
                       className={`border p-4 ${theme}`}
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <h3 className="font-bold">
-                            {entry.title || "Untitled record"}
-                          </h3>
-                          <div className="mt-2 flex flex-wrap items-center gap-2">
-                            <span className="border border-current/30 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.18em]">
-                              {entry.entryType}
-                            </span>
-                            {entry.campaignDay ? (
-                              <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
-                                Campaign Day {entry.campaignDay}
+                        <div className="flex items-start gap-3">
+                          {insignia ? (
+                            <Image
+                              src={insignia.path}
+                              alt={`${insignia.label} patch`}
+                              width={52}
+                              height={52}
+                              className="h-12 w-12 shrink-0 object-contain drop-shadow-[0_0_10px_rgba(59,130,246,0.28)]"
+                            />
+                          ) : null}
+                          <div>
+                            <h3 className="font-bold">
+                              {entry.title || "Untitled record"}
+                            </h3>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <span className="border border-current/30 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.18em]">
+                                {entry.entryType}
                               </span>
-                            ) : null}
+                              {entry.campaignDay ? (
+                                <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                                  Campaign Day {entry.campaignDay}
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
                         </div>
                         <div className="text-right text-xs text-slate-400">

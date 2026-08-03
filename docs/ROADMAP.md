@@ -113,12 +113,12 @@ Roster and dossiers:
 - Each member has a stable internal identity independent of mutable display text.
 - The roster displays approved identity, designation, portrait, role, status, and progression affinity.
 - Pre-assignment Fireteam surfaces explain their locked or limited state; the full roster unlocks after assignment.
-- Each teammate has an approved initial dossier covering identity, portrait, biography, personality, strengths, weaknesses, role, affinity, and initial relationship state.
+- **Implemented.** Each teammate has one approved focused dossier card covering canonical portrait, designation, readiness affinity, and live relationship state. Expanded biography, personality, quote, and dedicated profile pages remain proposed rather than release-gating 0.7.0 scope.
 - Every relationship begins at Acquaintance I on the assignment date; earlier activity does not advance it.
 
 Fireteam identity:
 
-- **Planned.** The canonical identity is **Fireteam Epsilon**, with the motto **FIVE, FORWARD.** and the approved five-spear cobalt-and-gunmetal patch under [SDCB #151](https://app.notion.com/p/399bc7d80f45818793cdf215d092b463). The production asset is `public/images/fireteam/fireteam-epsilon-patch.png`; product integration remains part of 0.7.0 Fireteam Identity & Dossiers.
+- **Implemented.** The canonical identity is **Fireteam Epsilon**, with the motto **FIVE, FORWARD.** and the approved five-spear cobalt-and-gunmetal patch under [SDCB #151](https://app.notion.com/p/399bc7d80f45818793cdf215d092b463). The production asset is `public/images/fireteam/fireteam-epsilon-patch.png`; the shared catalog, completed-assignment ownership resolver, header/ceremony/Fireteam/Service History integration, and regression contract are implemented in `src/lib/personnel-insignia.ts`.
 - The canonical name, military designation, emblem, motto, visual palette, and patch are approved.
 - Identity is consistent across the ceremony, roster, dossiers, navigation, Service Record, and later Fireteam systems.
 - Placeholder identity or temporary artwork is not represented as final canonical content.

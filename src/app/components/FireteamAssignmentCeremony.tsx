@@ -10,8 +10,10 @@ type CeremonyAction = "begin" | "progress" | "complete";
 
 export default function FireteamAssignmentCeremony({
   initialStatus,
+  preview = false,
 }: {
   initialStatus: FireteamAssignmentStatus;
+  preview?: boolean;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -23,6 +25,99 @@ export default function FireteamAssignmentCeremony({
   const teammates = initialStatus.fireteam.members.filter(
     ({ isPlayer }) => !isPlayer
   );
+
+  if (preview) {
+    return (
+      <div className="mt-5 overflow-hidden border border-cyan-400/60 bg-[linear-gradient(135deg,rgba(2,6,23,0.96),rgba(0,15,25,0.94))] shadow-[0_0_32px_rgba(34,211,238,0.16)]">
+        <div className="border-b border-cyan-800/70 bg-cyan-950/25 px-5 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.32em] text-cyan-300">
+              Personnel Command · Formal Proceedings
+            </p>
+            <p className="text-[9px] uppercase tracking-[0.22em] text-slate-500">
+              Development Preview · No Record Mutation
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[0.72fr_1.4fr] lg:items-center">
+          <div className="flex flex-col items-center border-b border-cyan-900/70 pb-6 text-center lg:border-b-0 lg:border-r lg:pb-0 lg:pr-6">
+            <Image
+              src={initialStatus.fireteam.patchPath}
+              alt="Fireteam Epsilon assignment insignia"
+              width={220}
+              height={220}
+              className="h-40 w-40 object-contain drop-shadow-[0_0_28px_rgba(34,211,238,0.45)] sm:h-48 sm:w-48"
+            />
+            <p className="mt-3 text-[10px] font-bold uppercase tracking-[0.3em] text-cyan-300">
+              Unit Designation
+            </p>
+            <p className="mt-2 text-2xl font-black uppercase tracking-[0.08em] text-white">
+              Fireteam Epsilon
+            </p>
+            <p className="mt-2 text-xs font-bold uppercase tracking-[0.28em] text-cyan-200">
+              Five, Forward.
+            </p>
+          </div>
+
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-amber-300">
+              Assignment Order
+            </p>
+            <blockquote className="mt-3 border-l-2 border-amber-300/70 pl-4">
+              <p className="text-base font-bold leading-7 text-slate-100 sm:text-lg">
+                “ALEX-225. Individual Training is complete. Effective
+                immediately, you are assigned to Fireteam Epsilon.”
+              </p>
+            </blockquote>
+
+            <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-5">
+              {initialStatus.fireteam.members.map((member) => (
+                <div
+                  key={member.id}
+                  className={`border px-3 py-3 ${
+                    member.isPlayer
+                      ? "border-amber-400/60 bg-amber-950/20"
+                      : "border-cyan-900/70 bg-black/35"
+                  }`}
+                >
+                  <p
+                    className={`text-[9px] font-bold uppercase tracking-[0.14em] ${
+                      member.isPlayer ? "text-amber-200" : "text-cyan-300"
+                    }`}
+                  >
+                    {member.designation}
+                  </p>
+                  <p className="mt-1 text-[10px] uppercase tracking-[0.12em] text-slate-400">
+                    {member.isPlayer ? "You" : member.name}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <p className="mt-5 max-w-2xl text-xs leading-6 text-slate-300">
+              Your status advances from Individual to Fireteam Member. This
+              roster constitutes your permanent operational identity for
+              Phase II Fireteam Operations.
+            </p>
+
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-cyan-900/70 pt-4">
+              <p className="text-[9px] uppercase tracking-[0.2em] text-slate-500">
+                Acknowledgment creates the permanent assignment record
+              </p>
+              <button
+                type="button"
+                disabled
+                className="border border-amber-300/80 bg-amber-300/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.24em] text-amber-100"
+              >
+                Acknowledge Assignment
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   async function mutate(action: CeremonyAction, nextStep?: number) {
     setPending(true);

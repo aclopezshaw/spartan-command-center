@@ -41,6 +41,7 @@ The authority boundaries are recorded in [ADR-0002](adr/0002-source-of-truth-hie
 - [Notion Core Schema Contracts](NOTION_SCHEMA_CONTRACTS.md) — canonical Campaign Operations and Service Record fields, ownership, and migration rules.
 - [Architecture Decision Records](adr/README.md) — decisions and proposals with consequences.
 - [Phase II HUD Backgrounds](PHASE_II_HUD_BACKGROUNDS.md) — ordinary Fireteam Operations daypart plates and uniform-continuity rules.
+- [Personnel Insignia Framework](PERSONNEL_INSIGNIA_FRAMEWORK.md) — canonical patch assets, persistent award evidence, and display rules.
 - [Migration Notes](MIGRATION_NOTES.md) — preserved historical context from earlier discussions.
 - [Contributor Guide](../CONTRIBUTING.md) — repository conventions, implementation workflow, validation, and security rules.
 

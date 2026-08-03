@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   buildIntelReportProperties,
@@ -125,4 +126,23 @@ test("Intel Report client sends pageReadTo and never sends the legacy pagesRead 
     notes: "Field notes",
   });
   assert.equal("pagesRead" in JSON.parse(request.init.body), false);
+});
+
+test("successful and recovered Intel Reports share the Read habit completion path", async () => {
+  const route = await readFile(
+    new URL("../src/app/api/intel-reports/route.ts", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(route, /const INTEL_REPORT_HABIT_PROPERTY = "Read"/);
+  assert.match(
+    route,
+    /updateDailySitrepCheckbox\(\s*todaySitrep\.id,\s*INTEL_REPORT_HABIT_PROPERTY,\s*true\s*\)/
+  );
+  assert.match(route, /await checkIntelReportReadingHabit\(\)/);
+  assert.equal(
+    route.indexOf("await checkIntelReportReadingHabit()") >
+      route.indexOf("if (isRecoveredSubmission)"),
+    true
+  );
 });

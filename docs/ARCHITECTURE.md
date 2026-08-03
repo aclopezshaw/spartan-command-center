@@ -116,6 +116,7 @@ database ID, keeping both Intel routes on the same Notion API contract.
 2. `HudCheckbox.toggle` sends `propertyName` and `checked` to `/api/sitrep-checkbox`.
 3. The Route Handler calls `updateDailySitrepCheckbox`, which persists the source checkbox and reconciles the source-derived Unit Cohesion operation when permanent Fireteam assignment is complete and the record is assignment-date eligible.
 4. For a checked objective, the handler registers `scheduleAchievementEvaluation` with Next.js `after()` and returns the successful save response without waiting for achievement work. Daily SITREP, Weekly Operations, and mobile objective routes share this contract and expose `achievementEvaluation: "scheduled"` while preserving an empty `awarded` array for response compatibility.
+5. A successful or idempotently recovered Intel Report submission uses the same Daily SITREP updater to check the canonical `Read` objective, reconcile eligible Unit Cohesion evidence, and schedule achievement evaluation after the response.
 5. The post-response callback runs for up to the route's configured 60-second duration. A module-level single-flight coordinator coalesces overlapping requests in the same server process, logs failures without changing the already-durable habit mutation, and releases after success or failure so a later request can recover.
 6. `evaluateAchievements` uses `collectNotionPages` to follow every `has_more` / `next_cursor` response for earned and unearned definitions plus daily or weekly completion evidence. After dating a newly earned definition, it re-reads the formula-derived readiness award and reconciles one relation-backed Service History ledger row with a stable readiness operation ID. Every evaluation also repairs an earned achievement whose prior history write was interrupted; duplicate histories block reconciliation.
 7. The client receives the save response, clears its `Saving...` state, and refreshes server data. Achievement presentation can therefore appear on the next refresh without delaying checkbox feedback.
@@ -186,6 +187,15 @@ Operational inspection and recovery are documented in [`CAMPAIGN_ROLLOVER_RUNBOO
 11. Authenticated `GET /api/progression/promotion` is read-only. It also verifies the exact prior-to-current Promotion history for every awarded conventional rank above Recruit. A missing row produces recoverable `finalizing`; duplicates or malformed evidence produce `conflict`.
 12. `POST` requires the exact prior/current rank page IDs from a recovery order or current/target IDs from a new order, rechecks XP eligibility, advances at most one rank relation, and reconciles exactly one zero-reward `Promotion` Service History row linked to ALEX-225. The title and description preserve both ranks and the row date is the durable ceremony-completion date. The HUD summons clears only after both records verify; stale orders block and exact retries return the existing transition.
 13. A keyed module-level promise coalesces identical in-process promotion requests. Notion still cannot enforce a distributed unique constraint, so duplicate history evidence blocks further progression for explicit reconciliation.
+
+### Personnel insignia
+
+1. `src/lib/personnel-insignia.ts` owns canonical Fireteam patch paths, the implemented personnel-insignia catalog, and fail-closed lookup behavior.
+2. Fireteam Epsilon ownership is derived only from a completed canonical Fireteam Assignment whose persisted identity is `fireteam-epsilon`; an asset file by itself is not award evidence.
+3. The exact Assignment Service History title resolves to the same catalog entry, linking the player-facing history display to durable award evidence.
+4. `PageHeader` accepts an ordered list of awarded personnel insignia and omits those slots when no verified award exists. The completed Fireteam page and Assembly Hall supply the current evidence-backed list; the responsive cluster already supports later multiple-insignia additions.
+5. Ceremony, Fireteam identity, standings, and Service History presentation consume the shared catalog or Fireteam patch map instead of duplicating public paths.
+6. Command, specialization, campaign, and operational insignia remain phase-owned planned extensions until their authoritative persistence contracts exist.
 
 Daily SITREP and Weekly Operations rows remain operational evidence rather than
 player-facing Service History entries. Their record-worthy milestones enter the

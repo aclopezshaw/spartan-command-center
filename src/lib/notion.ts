@@ -28,6 +28,10 @@ import {
   type PhaseXpSummary,
 } from "@/lib/phase-xp";
 import {
+  sortCampaignMedalsNewestFirst,
+  type CampaignMedalRecord,
+} from "@/lib/campaign-medals";
+import {
   evaluateIndividualCompletion,
   toPersistedIndividualCompletionStatus,
   type IndividualCompletionEvaluation,
@@ -917,6 +921,7 @@ function toRolloverPhase(page: CampaignPhasePage): RolloverPhase {
 async function getCampaignRolloverRecords(): Promise<{
   phases: RolloverPhase[];
   events: EventQueryResult[];
+  phasePages: CampaignPhasePage[];
 }> {
   const notion = getNotionClient();
   const eventDataSourceId = getRequiredNotionId("EVENTS_DATABASE_ID");
@@ -934,7 +939,7 @@ async function getCampaignRolloverRecords(): Promise<{
   ];
 
   if (phaseIds.length === 0) {
-    return { phases: [], events };
+    return { phases: [], events, phasePages: [] };
   }
 
   const relatedPhases = (await Promise.all(
@@ -955,11 +960,13 @@ async function getCampaignRolloverRecords(): Promise<{
     page_size: 100,
   });
 
+  const phasePages =
+    campaignResponse.results as unknown as CampaignPhasePage[];
+
   return {
-    phases: (campaignResponse.results as unknown as CampaignPhasePage[]).map(
-      toRolloverPhase
-    ),
+    phases: phasePages.map(toRolloverPhase),
     events,
+    phasePages,
   };
 }
 
@@ -1016,6 +1023,40 @@ function getFrozenPhaseXpSnapshot(
     finalizedAt,
     version,
   };
+}
+
+/** Returns earned, frozen campaign medals for the Service Record rail. */
+export async function getCompletedCampaignMedals(): Promise<
+  CampaignMedalRecord[]
+> {
+  const { phasePages } = await getCampaignRolloverRecords();
+  const medalSources = phasePages.flatMap((phase) => {
+    if (phase.properties["Phase Status"]?.select?.name !== "Complete") {
+      return [];
+    }
+
+    const snapshot = getFrozenPhaseXpSnapshot(phase);
+
+    if (!snapshot || snapshot.medalEarned === "None") {
+      return [];
+    }
+
+    return [
+      {
+        id: phase.id,
+        campaignName:
+          phase.properties["Campaign Name"]?.title?.[0]?.plain_text ??
+          "Unnamed Campaign",
+        phaseName: getPhaseName(phase.properties) ?? "Unnamed Phase",
+        phaseNumber: phase.properties["Phase Number"]?.number ?? 0,
+        medalLevel: snapshot.medalEarned,
+        xpEarned: snapshot.earnedXp,
+        recordDate: snapshot.finalizedAt.slice(0, 10),
+      },
+    ];
+  });
+
+  return sortCampaignMedalsNewestFirst(medalSources);
 }
 
 async function getRolloverPhaseXpState(
@@ -2226,6 +2267,23 @@ export async function getAlexServiceRecord() {
   return notion.pages.retrieve({
     page_id: page.id,
   });
+}
+
+/** Resolves the lightweight, durable unlock used by shared navigation. */
+export async function isFireteamNavigationUnlocked() {
+  const serviceRecord = (await findAlexServiceRecord()) as
+    | AlexServiceRecordPage
+    | null;
+
+  if (!serviceRecord) {
+    return false;
+  }
+
+  const persisted = getPersistedFireteamAssignment(serviceRecord);
+  return (
+    persisted.status === "Complete" &&
+    persisted.fireteamId === FIRETEAM_EPSILON.id
+  );
 }
 
 type RankProgressionPage = {

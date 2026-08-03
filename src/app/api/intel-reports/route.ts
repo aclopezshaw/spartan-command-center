@@ -9,6 +9,15 @@ import {
   parseIntelReportRequest,
   type IntelReportRequest,
 } from "@/lib/intel-report";
+import {
+  getTodaySitrep,
+  updateDailySitrepCheckbox,
+} from "@/lib/notion";
+import { scheduleAchievementEvaluation } from "@/lib/achievement-evaluation";
+
+export const maxDuration = 60;
+
+const INTEL_REPORT_HABIT_PROPERTY = "Read";
 
 type NotionProperty = {
   type?: string;
@@ -80,6 +89,24 @@ function getArchiveBook(page: ArchivePage, archiveDataSourceId: string) {
   };
 }
 
+async function checkIntelReportReadingHabit() {
+  const todaySitrep = await getTodaySitrep();
+
+  if (!todaySitrep) {
+    throw new IntelReportError(
+      "The Intel Report was saved, but today's Daily SITREP could not be found.",
+      409
+    );
+  }
+
+  await updateDailySitrepCheckbox(
+    todaySitrep.id,
+    INTEL_REPORT_HABIT_PROPERTY,
+    true
+  );
+  scheduleAchievementEvaluation();
+}
+
 export async function POST(request: Request) {
   if (!(await hasAuthorizedSession())) {
     return NextResponse.json(
@@ -149,61 +176,66 @@ export async function POST(request: Request) {
       );
     }
 
-    if (
+    const isRecoveredSubmission =
       matchingReports.results.length === 1 &&
-      archiveBook.currentPage === pageReadTo
-    ) {
-      return NextResponse.json({
-        ok: true,
-        recovered: true,
+      archiveBook.currentPage === pageReadTo;
+
+    let advance;
+    if (isRecoveredSubmission) {
+      advance = {
         pagesRead: 0,
         previousPage: pageReadTo,
         newPage: pageReadTo,
-      });
-    }
-
-    let advance;
-    try {
-      advance = calculateIntelReportAdvance({
-        currentPage: archiveBook.currentPage,
-        totalPages: archiveBook.totalPages,
-        pageReadTo,
-      });
-    } catch (error) {
-      throw new IntelReportError(
-        error instanceof Error
-          ? error.message
-          : "Invalid Intel Report page update.",
-        400
-      );
-    }
-
-    if (matchingReports.results.length === 0) {
-      await notion.pages.create({
-        parent: { data_source_id: reportsDataSourceId },
-        properties: buildIntelReportProperties({
-          bookId,
-          bookTitle: archiveBook.title,
+      };
+    } else {
+      try {
+        advance = calculateIntelReportAdvance({
+          currentPage: archiveBook.currentPage,
+          totalPages: archiveBook.totalPages,
           pageReadTo,
-          pagesRead: advance.pagesRead,
-          notes,
-          reportedAt: new Date().toISOString(),
-        }),
+        });
+      } catch (error) {
+        throw new IntelReportError(
+          error instanceof Error
+            ? error.message
+            : "Invalid Intel Report page update.",
+          400
+        );
+      }
+
+      if (matchingReports.results.length === 0) {
+        await notion.pages.create({
+          parent: { data_source_id: reportsDataSourceId },
+          properties: buildIntelReportProperties({
+            bookId,
+            bookTitle: archiveBook.title,
+            pageReadTo,
+            pagesRead: advance.pagesRead,
+            notes,
+            reportedAt: new Date().toISOString(),
+          }),
+        });
+      }
+
+      await notion.pages.update({
+        page_id: bookId,
+        properties: {
+          "Current Page": {
+            number: pageReadTo,
+          },
+        },
       });
     }
 
-    await notion.pages.update({
-      page_id: bookId,
-      properties: {
-        "Current Page": {
-          number: pageReadTo,
-        },
-      },
-    });
+    await checkIntelReportReadingHabit();
 
     return NextResponse.json({
       ok: true,
-      recovered: matchingReports.results.length === 1,
+      recovered:
+        isRecoveredSubmission ||
+        matchingReports.results.length === 1,
+      habitChecked: INTEL_REPORT_HABIT_PROPERTY,
+      achievementEvaluation: "scheduled",
       ...advance,
     });
   } catch (error) {

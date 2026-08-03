@@ -1,13 +1,31 @@
+"use client";
+
 import Image from "next/image";
 import { getRankInsigniaPath } from "@/lib/rank-insignia";
+import {
+  FIRETEAM_EPSILON_INSIGNIA,
+  SCP_INSTITUTIONAL_INSIGNIA,
+  type PersonnelInsignia,
+} from "@/lib/personnel-insignia";
+import { useNavigationAvailability } from "./NavigationAvailability";
 
 export default function PageHeader({
   eyebrow,
   title,
+  personnelInsignia = [],
 }: {
   eyebrow: string;
   title: string;
+  personnelInsignia?: readonly PersonnelInsignia[];
 }) {
+  const { fireteamUnlocked } = useNavigationAvailability();
+  const visiblePersonnelInsignia =
+    personnelInsignia.length > 0
+      ? personnelInsignia
+      : fireteamUnlocked
+        ? [FIRETEAM_EPSILON_INSIGNIA]
+        : [];
+
   return (
     <div className="flex flex-col items-start justify-between gap-4 border-b border-cyan-700/50 pb-4 sm:flex-row">
       <div>
@@ -32,9 +50,20 @@ export default function PageHeader({
           />
         </div>
 
+        {visiblePersonnelInsignia.map((insignia) => (
+          <Image
+            key={insignia.id}
+            src={insignia.path}
+            alt={`${insignia.label} patch`}
+            width={96}
+            height={96}
+            className="h-[74px] w-[74px] object-contain drop-shadow-[0_0_12px_rgba(34,211,238,0.35)] sm:h-[92px] sm:w-[92px]"
+          />
+        ))}
+
         <Image
-          src="/images/scp-emblem-trans.png"
-          alt="Spartan Candidate Program"
+          src={SCP_INSTITUTIONAL_INSIGNIA.path}
+          alt={SCP_INSTITUTIONAL_INSIGNIA.label}
           width={110}
           height={110}
           className="h-[88px] w-[88px] object-contain opacity-90 sm:h-[110px] sm:w-[110px]"

@@ -1,6 +1,7 @@
 import {
     getActiveCampaignEventState,
     getAlexServiceRecord,
+    getCompletedCampaignMedals,
     getCampaignPhaseXpSummary,
     getPromotionStatus,
     getReadinessLedgerStatus,
@@ -16,6 +17,7 @@ import { getRankInsigniaPath } from "@/lib/rank-insignia";
 import Image from "next/image";
 import NavBar from "../../components/NavBar";
 import PageHeader from "../../components/PageHeader";
+import CampaignMedalCard from "../../components/CampaignMedalCard";
 
 function getTitleProperty(properties: any, propertyName: string) {
     return properties[propertyName]?.title?.[0]?.plain_text ?? "";
@@ -340,12 +342,20 @@ export default async function Home() {
     const freshRecord = await notion.pages.retrieve({
   page_id: (record as any).id,
 });
-    const activeCampaignEventState = await getActiveCampaignEventState();
+    const [
+        activeCampaignEventState,
+        promotion,
+        readinessLedger,
+        campaignMedals,
+    ] = await Promise.all([
+        getActiveCampaignEventState(),
+        getPromotionStatus(),
+        getReadinessLedgerStatus(),
+        getCompletedCampaignMedals(),
+    ]);
     const phaseXpSummary = await getCampaignPhaseXpSummary(
         activeCampaignEventState
     );
-    const promotion = await getPromotionStatus();
-    const readinessLedger = await getReadinessLedgerStatus();
     const readiness = readinessLedger.authoritativeTotals;
     const readinessTrends = calculateReadinessTrends({
         entries: readinessLedger.entries,
@@ -647,14 +657,31 @@ const properties = (freshRecord as any).properties;
                                     </p>
                                 </div>
 
-                                <div className="border border-cyan-900/60 bg-slate-950/70 px-5 py-10 text-center">
-                                    <p className="text-sm font-bold uppercase tracking-[0.2em] text-slate-300">
-                                        None at this time.
-                                    </p>
-                                    <p className="mx-auto mt-3 max-w-[240px] text-[10px] uppercase leading-relaxed tracking-[0.16em] text-slate-600">
-                                        Campaign medals will be entered upon phase completion.
-                                    </p>
-                                </div>
+                                {campaignMedals.length > 0 ? (
+                                    <div className="space-y-4">
+                                        {campaignMedals.map((medal) => (
+                                            <CampaignMedalCard
+                                                key={medal.id}
+                                                medal={{
+                                                    ...medal,
+                                                    phaseName:
+                                                        getCampaignPhaseDisplayName(
+                                                            medal.phaseName
+                                                        ),
+                                                }}
+                                            />
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="border border-cyan-900/60 bg-slate-950/70 px-5 py-10 text-center">
+                                        <p className="text-sm font-bold uppercase tracking-[0.2em] text-slate-300">
+                                            None at this time.
+                                        </p>
+                                        <p className="mx-auto mt-3 max-w-[240px] text-[10px] uppercase leading-relaxed tracking-[0.16em] text-slate-600">
+                                            Campaign medals will be entered upon phase completion.
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         </aside>
                     </div>

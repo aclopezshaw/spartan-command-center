@@ -45,6 +45,8 @@ export default function CampaignRolloverControl({
   const canExecute =
     (status.state === "ready" || status.state === "recovery") &&
     status.eligible;
+  const confirmationMatches =
+    confirmation.trim().toUpperCase() === CONFIRMATION_PHRASE;
 
   async function inspect() {
     setPending("inspect");
@@ -75,7 +77,7 @@ export default function CampaignRolloverControl({
   }
 
   async function execute() {
-    if (confirmation !== CONFIRMATION_PHRASE) {
+    if (!confirmationMatches) {
       return;
     }
 
@@ -216,7 +218,7 @@ export default function CampaignRolloverControl({
             <button
               type="button"
               disabled={
-                pending !== null || confirmation !== CONFIRMATION_PHRASE
+                pending !== null || !confirmationMatches
               }
               onClick={execute}
               className="border border-amber-300/80 bg-amber-300/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-amber-100 transition hover:bg-amber-300/20 disabled:cursor-not-allowed disabled:opacity-40"

@@ -1,15 +1,10 @@
 import Image from "next/image";
+import type {
+    CampaignMedalLevel,
+    CampaignMedalRecord,
+} from "@/lib/campaign-medals";
 
-export type CampaignMedalLevel = "Bronze" | "Silver" | "Gold";
-
-export type CampaignMedalRecord = {
-    id: string;
-    campaignName: string;
-    phaseName: string;
-    medalLevel: CampaignMedalLevel;
-    xpEarned: number;
-    recordDate: string;
-};
+export type { CampaignMedalLevel, CampaignMedalRecord };
 
 const medalThemes: Record<
     CampaignMedalLevel,
@@ -31,15 +26,6 @@ const medalThemes: Record<
         levelClassName: "text-[#d8bd68]",
     },
 };
-
-export function sortCampaignMedalsNewestFirst(
-    medals: CampaignMedalRecord[]
-) {
-    return [...medals].sort(
-        (left, right) =>
-            Date.parse(right.recordDate) - Date.parse(left.recordDate)
-    );
-}
 
 export default function CampaignMedalCard({
     medal,

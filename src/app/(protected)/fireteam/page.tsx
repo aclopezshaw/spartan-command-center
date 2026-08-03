@@ -11,6 +11,7 @@ import {
   getFireteamAssignmentStatus,
   getUnitCohesionStatus,
 } from "@/lib/notion";
+import { getAwardedPersonnelInsignia } from "@/lib/personnel-insignia";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -52,8 +53,12 @@ export default async function FireteamPage({
     cohesion.relationships.map((relationship) => [
       relationship.memberId,
       relationship,
-    ])
+      ])
   );
+  const personnelInsignia = getAwardedPersonnelInsignia({
+    fireteamAssignmentState: assignment.state,
+    fireteamId: assignment.persisted.fireteamId,
+  });
 
   return (
     <main className="min-h-screen bg-black p-4 font-mono text-slate-100 sm:p-6">
@@ -64,6 +69,7 @@ export default async function FireteamPage({
           <PageHeader
             eyebrow="SCP Personnel Command · Phase II Operations"
             title={unlocked ? assignment.fireteam.name : "Fireteam Records"}
+            personnelInsignia={personnelInsignia}
           />
 
           {isDevelopmentPreview ? (

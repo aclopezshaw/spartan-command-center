@@ -12,8 +12,10 @@ import {
   getCampaignRolloverStatus,
   getFireteamAssignmentStatus,
   getPromotionStatus,
+  type FireteamAssignmentStatus,
 } from "@/lib/notion";
 import { buildRankProgression } from "@/lib/rank-progression";
+import { getAwardedPersonnelInsignia } from "@/lib/personnel-insignia";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -43,7 +45,137 @@ function EvidenceItem({
   );
 }
 
-export default async function AssemblyHallPage() {
+function FireteamCeremonyPreview({
+  assignment,
+}: {
+  assignment: FireteamAssignmentStatus;
+}) {
+  return (
+    <div className="mt-6 overflow-hidden border border-cyan-700/50 bg-black shadow-[0_0_45px_rgba(8,145,178,0.2)]">
+      <div className="relative min-h-[440px] overflow-hidden sm:min-h-[520px] lg:min-h-[600px]">
+        <Image
+          src="/images/command-assembly-hall-active.png"
+          alt="SCP candidates seated for an active ceremony in the Command Assembly Hall"
+          fill
+          priority
+          className="object-cover object-center"
+        />
+        <div className="absolute inset-0 bg-black/5" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08)_55%,rgba(0,0,0,0.42)_100%)]" />
+        <div className="absolute left-4 top-4 z-10 border-l-2 border-cyan-400/70 bg-black/55 px-4 py-3 backdrop-blur-sm sm:left-7 sm:top-7">
+          <p className="text-[10px] uppercase tracking-[0.32em] text-cyan-400">
+            Hall Status
+          </p>
+          <p className="mt-1 text-sm font-bold uppercase tracking-[0.18em] text-amber-200">
+            Ceremony Active
+          </p>
+        </div>
+        <div className="absolute right-4 top-4 z-10 hidden text-right sm:right-7 sm:top-7 sm:block">
+          <p className="text-[10px] uppercase tracking-[0.25em] text-slate-400">
+            Location
+          </p>
+          <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-cyan-200">
+            SCP Command Complex
+          </p>
+        </div>
+        <div className="pointer-events-none absolute inset-4 border border-cyan-400/15" />
+      </div>
+
+      <div className="border-t border-cyan-700/60 bg-[linear-gradient(135deg,rgba(2,6,23,0.98),rgba(0,0,0,0.98))] p-5 sm:p-7">
+        <div className="grid gap-6 lg:grid-cols-[1.45fr_0.8fr]">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.36em] text-amber-300">
+              Ceremony In Progress
+            </p>
+            <h2 className="mt-3 text-2xl font-black uppercase tracking-tight text-white sm:text-4xl">
+              Fireteam Assignment
+            </h2>
+            <p className="mt-3 max-w-2xl text-xs leading-6 text-slate-300 sm:text-sm">
+              Personnel Command has finalized Phase II unit assignments.
+              Formal proceedings are now in session.
+            </p>
+
+            <FireteamAssignmentCeremony
+              initialStatus={assignment}
+              preview
+            />
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <EvidenceItem
+                label="Phase Boundary"
+                value="Verified"
+                complete
+              />
+              <EvidenceItem
+                label="Required Events"
+                value="4 / 4 Complete"
+                complete
+              />
+              <EvidenceItem
+                label="Service History"
+                value="Verified"
+                complete
+              />
+              <EvidenceItem
+                label="Final Campaign Record"
+                value="Frozen"
+                complete
+              />
+            </div>
+          </div>
+
+          <aside className="self-start border border-cyan-900/70 bg-slate-950/75 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.28em] text-cyan-400">
+                  Current Order
+                </p>
+                <p className="mt-2 text-sm font-bold uppercase text-white">
+                  Fireteam Assignment
+                </p>
+              </div>
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300 shadow-[0_0_12px_rgba(252,211,77,0.8)]" />
+            </div>
+
+            <div className="mt-4 space-y-2 border-t border-cyan-900/60 pt-4 text-[11px] uppercase tracking-[0.14em]">
+              {[
+                ["Order Type", "Ceremonial Event"],
+                ["XP Award", "None"],
+                ["Readiness", "No Change"],
+                ["Record", "Service History"],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  className="flex justify-between gap-4"
+                >
+                  <span className="text-slate-500">{label}</span>
+                  <span className="text-slate-300">{value}</span>
+                </div>
+              ))}
+            </div>
+
+            <Link
+              href="/command-hud"
+              className="mt-5 block border border-cyan-500/70 px-3 py-2 text-center text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-200 transition hover:bg-cyan-400/10"
+            >
+              Return to Command HUD
+            </Link>
+          </aside>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default async function AssemblyHallPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ preview?: string | string[] }>;
+}) {
+  const requestedPreview = (await searchParams).preview;
+  const isFireteamCeremonyPreview =
+    process.env.NODE_ENV !== "production" &&
+    requestedPreview === "fireteam-assignment";
   const [assignment, rollover, promotion, phaseXpSummary] =
     await Promise.all([
       getFireteamAssignmentStatus(),
@@ -70,12 +202,11 @@ export default async function AssemblyHallPage() {
     eligibility.state,
     assignment.state
   );
-  const isAssignmentOrderActive = [
-    "available",
-    "in_progress",
-    "finalizing",
-    "conflict",
-  ].includes(assignment.state);
+  const isAssignmentOrderActive =
+    isFireteamCeremonyPreview ||
+    ["available", "in_progress", "finalizing", "conflict"].includes(
+      assignment.state
+    );
   const promotionOrderRank =
     promotion.pendingTransition?.toRank.name ??
     (promotion.state === "eligible"
@@ -88,7 +219,15 @@ export default async function AssemblyHallPage() {
       promotion.pendingTransition !== null);
   const isOrderActive =
     isAssignmentOrderActive || isPromotionOrderActive;
-  const presentation = isPromotionOrderActive
+  const presentation = isFireteamCeremonyPreview
+    ? {
+        eyebrow: "Ceremony In Progress",
+        title: "Fireteam Assignment",
+        summary:
+          "Personnel Command has finalized Phase II unit assignments. Formal proceedings are now in session.",
+        statusLabel: "Ceremony Active",
+      }
+    : isPromotionOrderActive
     ? {
         eyebrow:
           promotion.state === "finalizing"
@@ -119,6 +258,10 @@ export default async function AssemblyHallPage() {
     : isAssignmentOrderActive
       ? "Fireteam Assignment"
       : "No order issued";
+  const personnelInsignia = getAwardedPersonnelInsignia({
+    fireteamAssignmentState: assignment.state,
+    fireteamId: assignment.persisted.fireteamId,
+  });
 
   return (
     <main className="min-h-screen bg-black p-4 font-mono text-slate-100 sm:p-6">
@@ -129,9 +272,13 @@ export default async function AssemblyHallPage() {
           <PageHeader
             eyebrow="UNSC Personnel Command · Ceremonial District"
             title="Command Assembly Hall"
+            personnelInsignia={personnelInsignia}
           />
 
-          <div className="mt-6 overflow-hidden border border-cyan-700/50 bg-black shadow-[0_0_45px_rgba(8,145,178,0.2)]">
+          {isFireteamCeremonyPreview ? (
+            <FireteamCeremonyPreview assignment={assignment} />
+          ) : (
+            <div className="mt-6 overflow-hidden border border-cyan-700/50 bg-black shadow-[0_0_45px_rgba(8,145,178,0.2)]">
             <div className="relative min-h-[620px] overflow-hidden lg:min-h-[720px]">
               <Image
                 src={
@@ -198,6 +345,7 @@ export default async function AssemblyHallPage() {
                       ) : (
                         <FireteamAssignmentCeremony
                           initialStatus={assignment}
+                          preview={isFireteamCeremonyPreview}
                         />
                       )}
 
@@ -240,41 +388,57 @@ export default async function AssemblyHallPage() {
                             <EvidenceItem
                               label="Phase Boundary"
                               value={
-                                eligibility.evidence.boundaryReached
+                                isFireteamCeremonyPreview
+                                  ? "Verified"
+                                  : eligibility.evidence.boundaryReached
                                   ? "Verified"
                                   : eligibility.evidence.boundaryDate ??
                                     "Unscheduled"
                               }
-                              complete={eligibility.evidence.boundaryReached}
+                              complete={
+                                isFireteamCeremonyPreview ||
+                                eligibility.evidence.boundaryReached
+                              }
                             />
                             <EvidenceItem
                               label="Required Events"
-                              value={`${eligibility.evidence.eventCount - eligibility.evidence.incompleteEventTitles.length} / ${eligibility.evidence.eventCount} Complete`}
+                              value={
+                                isFireteamCeremonyPreview
+                                  ? "4 / 4 Complete"
+                                  : `${eligibility.evidence.eventCount - eligibility.evidence.incompleteEventTitles.length} / ${eligibility.evidence.eventCount} Complete`
+                              }
                               complete={
-                                eligibility.evidence.eventCount > 0 &&
-                                eligibility.evidence
-                                  .incompleteEventTitles.length === 0
+                                isFireteamCeremonyPreview ||
+                                (eligibility.evidence.eventCount > 0 &&
+                                  eligibility.evidence
+                                    .incompleteEventTitles.length === 0)
                               }
                             />
                             <EvidenceItem
                               label="Service History"
                               value={
-                                eligibility.evidence.eventHistoriesComplete
+                                isFireteamCeremonyPreview
+                                  ? "Verified"
+                                  : eligibility.evidence.eventHistoriesComplete
                                   ? "Verified"
                                   : "Review Required"
                               }
                               complete={
+                                isFireteamCeremonyPreview ||
                                 eligibility.evidence.eventHistoriesComplete
                               }
                             />
                             <EvidenceItem
                               label="Final Campaign Record"
                               value={
-                                eligibility.evidence.snapshotFinalized
+                                isFireteamCeremonyPreview
+                                  ? "Frozen"
+                                  : eligibility.evidence.snapshotFinalized
                                   ? "Frozen"
                                   : "Pending"
                               }
                               complete={
+                                isFireteamCeremonyPreview ||
                                 eligibility.evidence.snapshotFinalized
                               }
                             />
@@ -283,7 +447,7 @@ export default async function AssemblyHallPage() {
                       </div>
                     </div>
 
-                    <aside className="border border-cyan-900/70 bg-slate-950/75 p-4">
+                    <aside className="self-start border border-cyan-900/70 bg-slate-950/75 p-4">
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <p className="text-[10px] uppercase tracking-[0.28em] text-cyan-400">
@@ -335,7 +499,8 @@ export default async function AssemblyHallPage() {
               <div className="pointer-events-none absolute inset-4 border border-cyan-400/15" />
               <div className="pointer-events-none absolute inset-0 shadow-[inset_0_0_90px_rgba(8,145,178,0.22)]" />
             </div>
-          </div>
+            </div>
+          )}
 
           <div className="mt-5 border border-cyan-800/70 bg-[linear-gradient(135deg,rgba(2,6,23,0.96),rgba(0,0,0,0.92))] p-5 shadow-[0_0_24px_rgba(8,145,178,0.12)] sm:p-6">
             <div className="flex flex-col justify-between gap-4 border-b border-cyan-900/70 pb-5 sm:flex-row sm:items-start">

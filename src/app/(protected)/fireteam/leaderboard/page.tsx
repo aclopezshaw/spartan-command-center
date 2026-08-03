@@ -6,6 +6,7 @@ import type {
   FireteamStandingId,
   FireteamEventScore,
 } from "@/lib/fireteam-standings";
+import { FIRETEAM_PATCHES } from "@/lib/personnel-insignia";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -22,35 +23,35 @@ const FIRETEAM_PRESENTATION: Record<
 > = {
   alpha: {
     name: "Fireteam Alpha",
-    patchPath: "/images/fireteam/rivals/fireteam-alpha-patch.png",
+    patchPath: FIRETEAM_PATCHES.alpha.path,
     accent: "#a5b56a",
     accentMuted: "rgba(165, 181, 106, 0.14)",
     specialty: "Formation · Professional",
   },
   delta: {
     name: "Fireteam Delta",
-    patchPath: "/images/fireteam/rivals/fireteam-delta-patch.png",
+    patchPath: FIRETEAM_PATCHES.delta.path,
     accent: "#d59a3a",
     accentMuted: "rgba(213, 154, 58, 0.13)",
     specialty: "Sustainment · Recovery",
   },
   epsilon: {
     name: "Fireteam Epsilon",
-    patchPath: "/images/fireteam/fireteam-epsilon-patch.png",
+    patchPath: FIRETEAM_PATCHES.epsilon.path,
     accent: "#38bdf8",
     accentMuted: "rgba(56, 189, 248, 0.15)",
     specialty: "Adaptive · Balanced",
   },
   sigma: {
     name: "Fireteam Sigma",
-    patchPath: "/images/fireteam/rivals/fireteam-sigma-patch.png",
+    patchPath: FIRETEAM_PATCHES.sigma.path,
     accent: "#a94b52",
     accentMuted: "rgba(169, 75, 82, 0.15)",
     specialty: "Aggression · Physical",
   },
   theta: {
     name: "Fireteam Theta",
-    patchPath: "/images/fireteam/rivals/fireteam-theta-patch.png",
+    patchPath: FIRETEAM_PATCHES.theta.path,
     accent: "#28b8bd",
     accentMuted: "rgba(40, 184, 189, 0.13)",
     specialty: "Analysis · Intelligence",

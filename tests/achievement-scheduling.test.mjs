@@ -6,6 +6,7 @@ const routePaths = [
   "src/app/api/sitrep-checkbox/route.ts",
   "src/app/api/weekly-operations/route.ts",
   "src/app/api/mobile/hud/objective/route.ts",
+  "src/app/api/intel-reports/route.ts",
 ];
 
 test("habit mutation routes schedule achievement work after the response", async () => {

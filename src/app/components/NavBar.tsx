@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { useNavigationAvailability } from "./NavigationAvailability";
 
 type NavDestination = {
   label: string;
@@ -23,7 +24,7 @@ type GroupedNavItem = {
 
 type NavItem = DirectNavItem | GroupedNavItem;
 
-const navigation: NavItem[] = [
+const baseNavigation: NavItem[] = [
   {
     type: "direct",
     label: "Command HUD",
@@ -50,6 +51,18 @@ const navigation: NavItem[] = [
     label: "Assembly Hall",
     href: "/assembly-hall",
   },
+];
+
+const fireteamNavigation: GroupedNavItem = {
+  type: "group",
+  label: "Fireteam",
+  destinations: [
+    { label: "Personnel Dossiers", href: "/fireteam" },
+    { label: "Leaderboard", href: "/fireteam/leaderboard" },
+  ],
+};
+
+const trailingNavigation: NavItem[] = [
   {
     type: "direct",
     label: "SMU",
@@ -105,10 +118,12 @@ function Destination({
 }
 
 function DesktopNavigation({
+  navigation,
   pathname,
   openGroup,
   setOpenGroup,
 }: {
+  navigation: NavItem[];
   pathname: string;
   openGroup: string | null;
   setOpenGroup: (
@@ -201,10 +216,12 @@ function DesktopNavigation({
 }
 
 function MobileNavigation({
+  navigation,
   pathname,
   open,
   setOpen,
 }: {
+  navigation: NavItem[];
   pathname: string;
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -296,8 +313,12 @@ function MobileNavigation({
 
 export default function NavBar() {
   const pathname = usePathname();
+  const { fireteamUnlocked } = useNavigationAvailability();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const navigation = fireteamUnlocked
+    ? [...baseNavigation, fireteamNavigation, ...trailingNavigation]
+    : [...baseNavigation, ...trailingNavigation];
 
   return (
     <nav
@@ -305,11 +326,13 @@ export default function NavBar() {
       className="relative z-40 ml-auto w-full border border-cyan-600/60 bg-slate-950/85 p-2 shadow-[0_0_24px_rgba(8,145,178,0.12)] lg:w-fit"
     >
       <DesktopNavigation
+        navigation={navigation}
         pathname={pathname}
         openGroup={openGroup}
         setOpenGroup={setOpenGroup}
       />
       <MobileNavigation
+        navigation={navigation}
         pathname={pathname}
         open={mobileOpen}
         setOpen={setMobileOpen}

@@ -1,17 +1,18 @@
 import type { IndividualCompletionState } from "@/lib/individual-completion";
+import { FIRETEAM_EPSILON_INSIGNIA } from "./personnel-insignia.ts";
 
 export const FIRETEAM_ASSIGNMENT_VERSION = 1;
 export const FIRETEAM_ASSIGNMENT_MAX_STEP = 4;
 export const FIRETEAM_ASSIGNMENT_OPERATION_ID =
   "fireteam-assignment:alex-225:fireteam-epsilon:v1";
 export const FIRETEAM_ASSIGNMENT_HISTORY_TITLE =
-  "Assigned to Fireteam Epsilon";
+  FIRETEAM_EPSILON_INSIGNIA.awardHistoryTitle;
 
 export const FIRETEAM_EPSILON = {
   id: "fireteam-epsilon",
   name: "Fireteam Epsilon",
   motto: "FIVE, FORWARD.",
-  patchPath: "/images/fireteam/fireteam-epsilon-patch.png",
+  patchPath: FIRETEAM_EPSILON_INSIGNIA.path,
   members: [
     {
       id: "epsilon-alex-225",
