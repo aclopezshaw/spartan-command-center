@@ -7,6 +7,10 @@ import {
 } from "@/lib/date";
 import { getNotionClient } from "@/lib/notion-client";
 import { hasAuthorizedSession } from "@/lib/auth";
+import {
+    getAcademicQuarterOverview,
+    type AcademicCourseSummary,
+} from "@/lib/notion";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -49,15 +53,35 @@ function getDueDate(properties: any) {
     return due?.date?.start ?? null;
 }
 
-async function normalizeAssignment(page: any): Promise<OrderItem> {
+function normalizeCourseCode(course: string) {
+    return course
+        .trim()
+        .toUpperCase()
+        .replace(/^([A-Z]{2,4})\s*(\d{4})$/, "$1 $2");
+}
+
+function normalizeAssignment(
+    page: any,
+    coursesById: Map<string, AcademicCourseSummary>,
+    coursesByCode: Map<string, AcademicCourseSummary>
+): OrderItem | null {
     const properties = page.properties;
+    const relationId = properties.Course?.relation?.[0]?.id;
+    const selectedCode = normalizeCourseCode(
+        getSelectName(properties["Course Code"])
+    );
+    const course = relationId
+        ? coursesById.get(relationId)
+        : coursesByCode.get(selectedCode);
+
+    if (!course) {
+        return null;
+    }
 
     return {
         id: page.id,
         title: getTitle(properties),
-        course:
-            getSelectName(properties["Course Code"]) ||
-            "Unassigned",
+        course: course.code,
         dueDate: getDueDate(properties),
         priority:
             getSelectName(properties.Priority) ||
@@ -102,38 +126,6 @@ function getNumberProperty(properties: any, propertyName: string) {
   return 0;
 }
 
-function getSelect(property: any) {
-    return property?.select?.name ?? "";
-}
-
-function getRollupText(property: any) {
-    return (
-        property?.rollup?.array?.[0]?.title?.[0]?.plain_text ??
-        property?.rollup?.array?.[0]?.rich_text?.[0]?.plain_text ??
-        property?.rollup?.array?.[0]?.name ??
-        ""
-    );
-}
-
-async function getRelationTitle(property: any) {
-    const notion = getNotionClient();
-    const relationId = property?.relation?.[0]?.id;
-
-    if (!relationId) return "";
-
-    const page = await notion.pages.retrieve({ page_id: relationId });
-    const properties = (page as any).properties;
-
-    const titleProperty =
-        properties["Course Name"] ??
-        properties.Name ??
-        properties.Title ??
-        properties.Course ??
-        properties.Class;
-
-    return titleProperty?.title?.[0]?.plain_text ?? "";
-}
-
 export async function GET() {
     if (!(await hasAuthorizedSession())) {
         return NextResponse.json(
@@ -149,6 +141,20 @@ export async function GET() {
         if (!databaseId) {
             throw new Error("Missing ASSIGNMENTS_DATA_SOURCE_ID");
         }
+
+        const quarterOverview = await getAcademicQuarterOverview();
+        const activeCourses = quarterOverview.active?.courses ?? [];
+        const coursesById = new Map(
+            activeCourses.map((course) => [course.id, course])
+        );
+        const coursesByCode = new Map(
+            activeCourses.map((course) => [
+                normalizeCourseCode(course.code),
+                course,
+            ])
+        );
+        const normalizeActiveAssignment = (page: unknown) =>
+            normalizeAssignment(page, coursesById, coursesByCode);
 
         const today = getOperationalDateKey();
         const dueSoonEndExclusiveDateKey = addDaysToDateKey(today, 4);
@@ -232,9 +238,9 @@ export async function GET() {
             page_size: 100,
         });
 
-        const focusQueue = await Promise.all(
-            focusResponse.results.map(normalizeAssignment)
-        );
+        const focusQueue = focusResponse.results
+            .map(normalizeActiveAssignment)
+            .filter((item): item is OrderItem => item !== null);
         focusQueue.sort((a, b) => {
             if (!a.dueDate) return 1;
             if (!b.dueDate) return -1;
@@ -242,9 +248,10 @@ export async function GET() {
             return a.dueDate.localeCompare(b.dueDate);
         });
 
-        const dueSoon = (await Promise.all(
-            dueSoonResponse.results.map(normalizeAssignment)
-        )).filter((item) => {
+        const dueSoon = dueSoonResponse.results
+            .map(normalizeActiveAssignment)
+            .filter((item): item is OrderItem => item !== null)
+            .filter((item) => {
             if (!item.dueDate) return false;
 
             const dueDateKey = getOperationalDateKeyFromValue(item.dueDate);
@@ -252,7 +259,7 @@ export async function GET() {
                 dueDateKey >= today &&
                 dueDateKey < dueSoonEndExclusiveDateKey
             );
-        });
+            });
         dueSoon.sort((a, b) => {
             if (!a.dueDate) return 1;
             if (!b.dueDate) return -1;
@@ -260,13 +267,14 @@ export async function GET() {
             return a.dueDate.localeCompare(b.dueDate);
         });
 
-        const overdue = (await Promise.all(
-            overdueResponse.results.map(normalizeAssignment)
-        )).filter((item) => {
+        const overdue = overdueResponse.results
+            .map(normalizeActiveAssignment)
+            .filter((item): item is OrderItem => item !== null)
+            .filter((item) => {
             if (!item.dueDate) return false;
 
             return getOperationalDateKeyFromValue(item.dueDate) < today;
-        });
+            });
         overdue.sort((a, b) => {
             if (!a.dueDate) return 1;
             if (!b.dueDate) return -1;
@@ -322,9 +330,9 @@ export async function GET() {
             page_size: 100,
         });
 
-        const nextCritical = await Promise.all(
-            nextCriticalResponse.results.map(normalizeAssignment)
-        );
+        const nextCritical = nextCriticalResponse.results
+            .map(normalizeActiveAssignment)
+            .filter((item): item is OrderItem => item !== null);
 
         nextCritical.sort((a, b) => {
             if (!a.dueDate) return 1;

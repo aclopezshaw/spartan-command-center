@@ -4407,22 +4407,31 @@ export async function updateWeeklyOperationCheckbox(
   return updated;
 }
 
+export type AcademicCourseSummary = {
+  id: string;
+  code: string;
+  name: string;
+};
+
 export type AcademicQuarterSummary = {
   name: string;
   credits: number;
   startDate: string | null;
   endDate: string | null;
-  courses: Array<{
-    code: string;
-    name: string;
-  }>;
+  courses: AcademicCourseSummary[];
 };
 
 type AcademicQuarterPage = {
   id: string;
   properties?: {
     Quarter?: { title?: Array<{ plain_text?: string }> };
-    Credits?: { number?: number | null };
+    Credits?: {
+      number?: number | null;
+      rollup?: {
+        type?: string;
+        number?: number | null;
+      };
+    };
     "Start Date"?: { date?: { start?: string | null } | null };
     "End Date"?: { date?: { start?: string | null } | null };
     Status?: { select?: { name?: string } | null };
@@ -4430,6 +4439,7 @@ type AcademicQuarterPage = {
 };
 
 type AcademicCoursePage = {
+  id: string;
   properties?: {
     "Course ID"?: {
       rich_text?: Array<{ plain_text?: string }>;
@@ -4569,6 +4579,7 @@ async function toAcademicQuarterSummary(
       ).properties;
 
       return {
+        id: coursePage.id,
         code:
           courseProperties?.["Course ID"]?.rich_text?.[0]
             ?.plain_text ?? "",
@@ -4585,7 +4596,10 @@ async function toAcademicQuarterSummary(
     name:
       properties.Quarter?.title?.[0]?.plain_text ??
       "Unnamed Quarter",
-    credits: properties.Credits?.number ?? 0,
+    credits:
+      properties.Credits?.rollup?.number ??
+      properties.Credits?.number ??
+      0,
     startDate: properties["Start Date"]?.date?.start ?? null,
     endDate: properties["End Date"]?.date?.start ?? null,
     courses,

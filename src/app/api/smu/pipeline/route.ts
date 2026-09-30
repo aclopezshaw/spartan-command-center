@@ -7,12 +7,17 @@ import {
 import { getNotionClient } from "@/lib/notion-client";
 import { hasAuthorizedSession } from "@/lib/auth";
 import { getAcademicAssignmentKind } from "@/lib/academic-record";
+import {
+    getAcademicQuarterOverview,
+    type AcademicCourseSummary,
+} from "@/lib/notion";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type Assignment = {
-    course: string;
+    courseId: string | null;
+    courseCode: string;
     status: string;
     dueDate: string | null;
     id: string;
@@ -29,22 +34,21 @@ function getDueDate(properties: any) {
     return properties["Due Date"]?.date?.start ?? null;
 }
 
-function normalizeCourse(course: string) {
-  const cleaned = course.trim().toUpperCase();
-
-  if (cleaned.includes("AID")) return "AID 1080";
-  if (cleaned.includes("BIO")) return "BIO 2100";
-  if (cleaned.includes("GPS")) return "GPS 2100";
-  if (cleaned.includes("SOC")) return "SOC 1305";
-
-  return cleaned;
+function normalizeCourseCode(course: string) {
+    return course
+        .trim()
+        .toUpperCase()
+        .replace(/^([A-Z]{2,4})\s*(\d{4})$/, "$1 $2");
 }
 
 function normalizeAssignment(page: any): Assignment {
     const properties = page.properties;
 
     return {
-        course: normalizeCourse(getSelectName(properties["Course Code"]) || "Unassigned"),
+        courseId: properties.Course?.relation?.[0]?.id ?? null,
+        courseCode: normalizeCourseCode(
+            getSelectName(properties["Course Code"])
+        ),
         status: getSelectName(properties.Status) || "Not Started",
         dueDate: getDueDate(properties),
         id: page.id,
@@ -52,6 +56,20 @@ function normalizeAssignment(page: any): Assignment {
         priority: getSelectName(properties.Priority) || "Low",
         estimatedMinutes: properties["Est. Time"]?.number ?? 0,
     };
+}
+
+function belongsToCourse(
+    assignment: Assignment,
+    course: AcademicCourseSummary
+) {
+    if (assignment.courseId) {
+        return assignment.courseId === course.id;
+    }
+
+    return (
+        assignment.courseCode !== "" &&
+        assignment.courseCode === normalizeCourseCode(course.code)
+    );
 }
 
 function isComplete(status: string) {
@@ -100,7 +118,10 @@ export async function GET() {
             throw new Error("Missing ASSIGNMENTS_DATA_SOURCE_ID");
         }
 
-        const pages = await getAllAssignments(dataSourceId);
+        const [pages, quarterOverview] = await Promise.all([
+            getAllAssignments(dataSourceId),
+            getAcademicQuarterOverview(),
+        ]);
         const assignments = pages.map(normalizeAssignment);
 
         const { startDateKey, endDateKeyExclusive } = getOperationalWeekRange(
@@ -109,13 +130,11 @@ export async function GET() {
         );
         const todayDateKey = getOperationalDateKey();
 
-        const courses = Array.from(
-            new Set(assignments.map((a) => a.course).filter(Boolean))
-        ).filter((course) => course !== "Unassigned");
+        const courses = quarterOverview.active?.courses ?? [];
 
         const pipeline = courses.map((course) => {
             const courseAssignments = assignments.filter(
-                (a) => a.course === course
+                (assignment) => belongsToCourse(assignment, course)
             );
 
             const thisWeekAssignments = courseAssignments.filter((a) => {
@@ -218,8 +237,8 @@ export async function GET() {
                 )[0];
 
             return {
-                course,
-                name: course,
+                course: course.code,
+                name: course.name,
                 weekProgress: percent(weekComplete, weekTotal),
                 quarterProgress: percent(quarterComplete, quarterTotal),
                 weekComplete,

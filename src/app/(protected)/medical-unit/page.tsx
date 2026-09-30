@@ -82,17 +82,6 @@ const TRANSFER_CREDITS = 30;
 const COMPLETED_QUARTER_CREDITS = 0;
 const DEGREE_CREDITS_REQUIRED = 160;
 
-function getCourseName(courseCode: string) {
-    const courseNames: Record<string, string> = {
-        "GPS 2100": "Galen Pathway to Success",
-        "BIO 2100": "Microbiology",
-        "SOC 1305": "Introduction to Sociology",
-        "AID 1080": "AI and Digital Literacy",
-    };
-
-    return courseNames[courseCode] ?? courseCode;
-}
-
 function Panel({
     title,
     className = "",
@@ -336,6 +325,33 @@ function RecordStat({
         >
             <span className="text-slate-500">{label}</span>
             <span className="shrink-0 text-right text-cyan-100">{value}</span>
+        </div>
+    );
+}
+
+function ActiveCourseRoster({ courses }: { courses: PipelineCourse[] }) {
+    return (
+        <div className="mb-4 border-b border-cyan-900/60 pb-4">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                Active Courses
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+                {courses.length > 0 ? (
+                    courses.map((course) => (
+                        <span
+                            key={course.course}
+                            className="border border-cyan-800/70 bg-cyan-950/40 px-2 py-1 text-xs font-bold text-cyan-200"
+                            title={course.name}
+                        >
+                            {course.course}
+                        </span>
+                    ))
+                ) : (
+                    <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                        No active courses
+                    </span>
+                )}
+            </div>
         </div>
     );
 }
@@ -588,7 +604,7 @@ export default function MedicalUnitPage() {
                                         <CourseRow
                                             key={course.course}
                                             code={course.course}
-                                            name={getCourseName(course.course)}
+                                            name={course.name}
                                             weekComplete={course.weekComplete}
                                             weekTotal={course.weekTotal}
                                             quarterComplete={course.quarterComplete}
@@ -624,6 +640,7 @@ export default function MedicalUnitPage() {
                             </Panel>
 
                             <Panel title="Today's Orders">
+                                <ActiveCourseRoster courses={pipeline} />
                                 {focusError && (
                                     <p className="mb-3 text-xs text-amber-300">
                                         {focusError}
@@ -770,6 +787,7 @@ export default function MedicalUnitPage() {
                             </Panel>
 
                             <Panel title="Medical Service Record">
+                                <ActiveCourseRoster courses={pipeline} />
                                 <div className="grid gap-3 text-sm">
                                     <RecordStat
                                         label="Assignments Completed"

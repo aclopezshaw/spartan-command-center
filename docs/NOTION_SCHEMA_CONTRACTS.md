@@ -2,12 +2,33 @@
 
 **Status:** Implemented
 **Owner:** SDCB #92
-**Last verified:** 2026-07-26
+**Last verified:** 2026-09-29
 
 This document records the canonical Campaign Operations and Service Record
 properties used by Spartan Command Center. Repository code remains authoritative
 for application behavior; Notion remains authoritative for the operational
 records themselves.
+
+## Academic Operations
+
+### Courses and quarter credits
+
+| Database | Property | Type | Contract |
+| --- | --- | --- | --- |
+| Courses | `Credits` | Number | Credit value for the course instance. Zero-credit labs and clinical components use `0`. |
+| Courses | `Quarter` | Relation | Owning academic quarter for this course instance. Courses related to the one Quarter marked `Active` form the current SMU roster. |
+| Quarters | `Credits` | Rollup | Sum of `Credits` across the quarter's related `🎓 Courses`; this is not manually maintained. |
+| Quarters | `Status` | Select | Exactly one current quarter is `Active`; `Up Next` identifies the next-quarter outlook. |
+
+Assignments should use their `Course` relation as the authoritative course
+identity. The legacy `Course Code` select is a compatibility fallback only.
+Active Training Pipeline, Academic Intelligence, Study Load Forecast, Medical
+Service Record totals, and Today's Orders are scoped to the active-quarter
+course roster.
+
+`getAcademicQuarterOverview` in `src/lib/notion.ts` reads the numeric rollup
+value for SMU presentation. It retains number-property compatibility for older
+or partially migrated workspaces.
 
 ## Campaign Operations
 
@@ -25,7 +46,7 @@ Each row represents one campaign phase.
 | `Phase Length` | Number | Number of campaign days in the phase. |
 | `Phase Day` | Formula | Human-readable phase-relative day. Application decisions derive the day from `Phase Start Date` with the Denver date helpers rather than trusting Notion `now()`. |
 | `Phase End Date` | Formula | Human-readable inclusive phase end date. |
-| `Phase Status` | Select | The only mutable phase lifecycle field: `Upcoming`, `Active`, or `Complete`. |
+| `Phase Status` | Select | The only mutable phase lifecycle field: `Upcoming`, `Active`, `Complete`, or `Superseded`. `Superseded` preserves an unfinished historical run when an explicitly authorized relaunch creates a distinct replacement phase; it must not be treated as successful completion or medal evidence. |
 
 `Status`, campaign-level start/length/end fields, and campaign progress mirrors
 were removed. Rollover writes and verifies `Phase Status` only.
