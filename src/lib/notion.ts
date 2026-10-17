@@ -2309,13 +2309,15 @@ export async function getPersonnelShellState() {
           page_id: currentRankRelations[0].id,
         })) as unknown as RankProgressionPage)
       : null;
+  const currentRank = currentRankPage
+    ? getRankRecord(currentRankPage)
+    : null;
 
   return {
     fireteamUnlocked:
       persisted.status === "Complete" &&
       persisted.fireteamId === FIRETEAM_EPSILON.id,
-    currentRank:
-      currentRankPage?.properties.Rank?.title?.[0]?.plain_text ?? "Recruit",
+    currentRank: currentRank?.name ?? "Recruit",
   };
 }
 
