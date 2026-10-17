@@ -4,6 +4,7 @@ import {
     getNotionClient,
     getRequiredNotionId,
 } from "@/lib/notion-client";
+import { isActiveAcademicAssignmentStatus } from "@/lib/academic-orders";
 
 type FocusAssignmentRequest = {
     id?: unknown;
@@ -64,6 +65,22 @@ export async function POST(request: Request) {
             return NextResponse.json(
                 { error: "Assignment not found" },
                 { status: 404 }
+            );
+        }
+
+        const statusProperty =
+            "properties" in assignment
+                ? assignment.properties.Status
+                : null;
+        const status =
+            statusProperty?.type === "select"
+                ? statusProperty.select?.name ?? ""
+                : "";
+
+        if (!isActiveAcademicAssignmentStatus(status)) {
+            return NextResponse.json(
+                { error: "Completed or skipped assignments cannot be focused" },
+                { status: 409 }
             );
         }
 

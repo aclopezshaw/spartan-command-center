@@ -11,6 +11,7 @@ import {
     getAcademicQuarterOverview,
     type AcademicCourseSummary,
 } from "@/lib/notion";
+import { isActiveAcademicAssignmentStatus } from "@/lib/academic-orders";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -96,10 +97,6 @@ function normalizeAssignment(
     };
 }
 
-function isComplete(item: OrderItem) {
-    return ["Done", "Complete", "Completed"].includes(item.status);
-}
-
 function getNumberProperty(properties: any, propertyName: string) {
   const property = properties[propertyName];
 
@@ -179,6 +176,12 @@ export async function GET() {
                             does_not_equal: "Complete",
                         },
                     },
+                    {
+                        property: "Status",
+                        select: {
+                            does_not_equal: "Skipped",
+                        },
+                    },
                 ],
             },
             page_size: 100,
@@ -212,6 +215,12 @@ export async function GET() {
                             does_not_equal: "Complete",
                         },
                     },
+                    {
+                        property: "Status",
+                        select: {
+                            does_not_equal: "Skipped",
+                        },
+                    },
                 ],
             },
             page_size: 100,
@@ -233,6 +242,12 @@ export async function GET() {
                             does_not_equal: "Complete",
                         },
                     },
+                    {
+                        property: "Status",
+                        select: {
+                            does_not_equal: "Skipped",
+                        },
+                    },
                 ],
             },
             page_size: 100,
@@ -240,7 +255,8 @@ export async function GET() {
 
         const focusQueue = focusResponse.results
             .map(normalizeActiveAssignment)
-            .filter((item): item is OrderItem => item !== null);
+            .filter((item): item is OrderItem => item !== null)
+            .filter((item) => isActiveAcademicAssignmentStatus(item.status));
         focusQueue.sort((a, b) => {
             if (!a.dueDate) return 1;
             if (!b.dueDate) return -1;
@@ -251,14 +267,15 @@ export async function GET() {
         const dueSoon = dueSoonResponse.results
             .map(normalizeActiveAssignment)
             .filter((item): item is OrderItem => item !== null)
+            .filter((item) => isActiveAcademicAssignmentStatus(item.status))
             .filter((item) => {
-            if (!item.dueDate) return false;
+                if (!item.dueDate) return false;
 
-            const dueDateKey = getOperationalDateKeyFromValue(item.dueDate);
-            return (
-                dueDateKey >= today &&
-                dueDateKey < dueSoonEndExclusiveDateKey
-            );
+                const dueDateKey = getOperationalDateKeyFromValue(item.dueDate);
+                return (
+                    dueDateKey >= today &&
+                    dueDateKey < dueSoonEndExclusiveDateKey
+                );
             });
         dueSoon.sort((a, b) => {
             if (!a.dueDate) return 1;
@@ -270,10 +287,11 @@ export async function GET() {
         const overdue = overdueResponse.results
             .map(normalizeActiveAssignment)
             .filter((item): item is OrderItem => item !== null)
+            .filter((item) => isActiveAcademicAssignmentStatus(item.status))
             .filter((item) => {
-            if (!item.dueDate) return false;
+                if (!item.dueDate) return false;
 
-            return getOperationalDateKeyFromValue(item.dueDate) < today;
+                return getOperationalDateKeyFromValue(item.dueDate) < today;
             });
         overdue.sort((a, b) => {
             if (!a.dueDate) return 1;
@@ -282,17 +300,6 @@ export async function GET() {
             return a.dueDate.localeCompare(b.dueDate);
         });
 
-        const priorityWeight = (priority: string) => {
-            switch (priority.toLowerCase()) {
-                case "critical":
-                return 3;
-                case "high":
-                return 2;
-                default:
-                return 1;
-            }
-            };
-
         const nextCriticalResponse = await notion.dataSources.query({
             data_source_id: databaseId,
             filter: {
@@ -300,29 +307,35 @@ export async function GET() {
                 {
                     property: "Status",
                     select: {
-                    does_not_equal: "Complete",
+                        does_not_equal: "Complete",
+                    },
+                },
+                {
+                    property: "Status",
+                    select: {
+                        does_not_equal: "Skipped",
                     },
                 },
                 {
                     property: "Priority",
                     select: {
-                    does_not_equal: "Optional",
+                        does_not_equal: "Optional",
                     },
                 },
                 {
                     or: [
-                    {
-                        property: "Priority",
-                        select: {
-                        equals: "High",
+                        {
+                            property: "Priority",
+                            select: {
+                                equals: "High",
+                            },
                         },
-                    },
-                    {
-                        property: "Est. Time",
-                        number: {
-                        greater_than_or_equal_to: 60,
+                        {
+                            property: "Est. Time",
+                            number: {
+                                greater_than_or_equal_to: 60,
+                            },
                         },
-                    },
                     ],
                 },
                 ],
@@ -332,7 +345,8 @@ export async function GET() {
 
         const nextCritical = nextCriticalResponse.results
             .map(normalizeActiveAssignment)
-            .filter((item): item is OrderItem => item !== null);
+            .filter((item): item is OrderItem => item !== null)
+            .filter((item) => isActiveAcademicAssignmentStatus(item.status));
 
         nextCritical.sort((a, b) => {
             if (!a.dueDate) return 1;
@@ -349,20 +363,30 @@ export async function GET() {
             (item) => !focusQueueIds.has(item.id)
         );
 
+        const dedupedOverdue = overdue.filter(
+            (item) => !focusQueueIds.has(item.id)
+        );
+
         const dueSoonIds = new Set(
             dedupedDueSoon.map((item) => item.id)
+        );
+
+        const overdueIds = new Set(
+            dedupedOverdue.map((item) => item.id)
         );
 
         const dedupedNextCritical = nextCritical
             .filter(
                 (item) =>
-                !focusQueueIds.has(item.id) &&
-                !dueSoonIds.has(item.id)
-        )
-        .slice(0, 5);
+                    !focusQueueIds.has(item.id) &&
+                    !dueSoonIds.has(item.id) &&
+                    !overdueIds.has(item.id)
+            )
+            .slice(0, 5);
 
         return NextResponse.json({
             focusQueue,
+            overdue: dedupedOverdue,
             dueSoon: dedupedDueSoon,
             nextCritical: dedupedNextCritical,
         });

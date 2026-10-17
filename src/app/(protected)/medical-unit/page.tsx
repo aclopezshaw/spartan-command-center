@@ -22,6 +22,7 @@ type OrderItem = {
 
 type OrdersResponse = {
     focusQueue: OrderItem[];
+    overdue: OrderItem[];
     dueSoon: OrderItem[];
     nextCritical: OrderItem[];
 };
@@ -250,7 +251,9 @@ function AssignmentItem({
     priority,
     onComplete,
     onFocus,
+    onSkip,
     isFocusing = false,
+    isSkipping = false,
 }: {
     id: string;
     title: string;
@@ -258,7 +261,9 @@ function AssignmentItem({
     priority: string;
     onComplete: (id: string) => void;
     onFocus?: (id: string) => void;
+    onSkip?: (id: string) => void;
     isFocusing?: boolean;
+    isSkipping?: boolean;
 }) {
     const color =
         priority?.toLowerCase() === "high"
@@ -280,18 +285,89 @@ function AssignmentItem({
                 <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">
                     {meta}
                 </p>
-                {onFocus && (
-                    <button
-                        type="button"
-                        onClick={() => onFocus(id)}
-                        disabled={isFocusing}
-                        aria-label={`Add ${title} to Focus Queue`}
-                        title="Add to Focus Queue"
-                        className="mt-2 text-[10px] uppercase tracking-[0.2em] text-cyan-500/70 transition hover:text-cyan-200 disabled:cursor-wait disabled:text-slate-600"
-                    >
-                        {isFocusing ? "Adding…" : "+ Focus"}
-                    </button>
+                {(onFocus || onSkip) && (
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
+                        {onFocus && (
+                            <button
+                                type="button"
+                                onClick={() => onFocus(id)}
+                                disabled={isFocusing || isSkipping}
+                                aria-label={`Add ${title} to Focus Queue`}
+                                title="Add to Focus Queue"
+                                className="text-[10px] uppercase tracking-[0.2em] text-cyan-500/70 transition hover:text-cyan-200 disabled:cursor-wait disabled:text-slate-600"
+                            >
+                                {isFocusing ? "Adding…" : "+ Focus"}
+                            </button>
+                        )}
+                        {onSkip && (
+                            <button
+                                type="button"
+                                onClick={() => onSkip(id)}
+                                disabled={isSkipping || isFocusing}
+                                aria-label={`Skip ${title}`}
+                                title="Mark assignment as skipped"
+                                className="text-[10px] uppercase tracking-[0.2em] text-slate-500 transition hover:text-amber-300 disabled:cursor-wait disabled:text-slate-700"
+                            >
+                                {isSkipping ? "Skipping…" : "+ Skip"}
+                            </button>
+                        )}
+                    </div>
                 )}
+            </div>
+        </div>
+    );
+}
+
+function FocusAssignmentItem({
+    item,
+    onComplete,
+}: {
+    item: OrderItem;
+    onComplete: (id: string) => void;
+}) {
+    return (
+        <div className="grid gap-4 border-b border-cyan-900/60 pb-4 last:border-b-0 last:pb-0 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
+            <button
+                type="button"
+                onClick={() => onComplete(item.id)}
+                aria-label={`Complete ${item.title}`}
+                title="Mark assignment complete"
+                className="h-5 w-5 border border-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.7)]"
+            />
+
+            <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <p className={`text-sm font-bold ${getPriorityColor(item.priority)}`}>
+                        {item.title}
+                    </p>
+                    <span className="text-[10px] uppercase tracking-[0.2em] text-cyan-500/70">
+                        {item.status}
+                    </span>
+                </div>
+                <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">
+                    {item.course} • Due {formatDueDate(item.dueDate)}
+                </p>
+            </div>
+
+            <div className="flex gap-5 text-left sm:block sm:text-right">
+                <div>
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">
+                        Priority
+                    </p>
+                    <p className={`mt-1 text-xs font-bold uppercase ${getPriorityColor(item.priority)}`}>
+                        {item.priority}
+                    </p>
+                </div>
+                <div className="sm:mt-2">
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">
+                        Est. Time
+                    </p>
+                    <p className="mt-1 text-xs font-bold text-slate-300">
+                        {item.estimatedMinutes > 0
+                            ? `${item.estimatedMinutes} min`
+                            : "Unscored"}
+                    </p>
+                </div>
             </div>
         </div>
     );
@@ -374,20 +450,40 @@ export const dynamic = "force-dynamic";
 export default function MedicalUnitPage() {
     const [orders, setOrders] = useState<OrdersResponse>({
         focusQueue: [],
+        overdue: [],
         dueSoon: [],
         nextCritical: [],
     });
     const [pipeline, setPipeline] = useState<PipelineCourse[]>([]);
     const [focusingAssignmentId, setFocusingAssignmentId] = useState<string | null>(null);
-    const [focusError, setFocusError] = useState<string | null>(null);
+    const [skippingAssignmentId, setSkippingAssignmentId] = useState<string | null>(null);
+    const [orderError, setOrderError] = useState<string | null>(null);
     const [quarter, setQuarter] = useState<QuarterSummary | null>(null);
     const [nextQuarter, setNextQuarter] = useState<QuarterSummary | null>(null);
     const [pipelineLoaded, setPipelineLoaded] = useState(false);
 
     async function loadOrders() {
-        const response = await fetch("/api/smu/orders");
-        const data = await response.json();
-        setOrders(data);
+        try {
+            const response = await fetch("/api/smu/orders", {
+                cache: "no-store",
+            });
+            const data: OrdersResponse & { error?: string } =
+                await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    data.error ?? "Unable to load today's orders"
+                );
+            }
+
+            setOrders(data);
+        } catch (error) {
+            setOrderError(
+                error instanceof Error
+                    ? error.message
+                    : "Unable to load today's orders"
+            );
+        }
     }
 
     async function loadPipeline() {
@@ -452,7 +548,7 @@ export default function MedicalUnitPage() {
 
     async function addToFocusQueue(id: string) {
         setFocusingAssignmentId(id);
-        setFocusError(null);
+        setOrderError(null);
 
         try {
             const response = await fetch("/api/smu/orders/focus", {
@@ -470,13 +566,49 @@ export default function MedicalUnitPage() {
 
             await loadOrders();
         } catch (error) {
-            setFocusError(
+            setOrderError(
                 error instanceof Error
                     ? error.message
                     : "Unable to update the focus queue"
             );
         } finally {
             setFocusingAssignmentId(null);
+        }
+    }
+
+    async function skipAssignment(id: string) {
+        setSkippingAssignmentId(id);
+        setOrderError(null);
+
+        try {
+            const response = await fetch("/api/smu/orders/skip", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ id }),
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error ?? "Unable to skip the assignment");
+            }
+
+            setOrders((current) => ({
+                focusQueue: current.focusQueue.filter((item) => item.id !== id),
+                overdue: current.overdue.filter((item) => item.id !== id),
+                dueSoon: current.dueSoon.filter((item) => item.id !== id),
+                nextCritical: current.nextCritical.filter((item) => item.id !== id),
+            }));
+            await Promise.all([loadOrders(), loadPipeline()]);
+        } catch (error) {
+            setOrderError(
+                error instanceof Error
+                    ? error.message
+                    : "Unable to skip the assignment"
+            );
+        } finally {
+            setSkippingAssignmentId(null);
         }
     }
 
@@ -641,21 +773,18 @@ export default function MedicalUnitPage() {
 
                             <Panel title="Today's Orders">
                                 <ActiveCourseRoster courses={pipeline} />
-                                {focusError && (
+                                {orderError && (
                                     <p className="mb-3 text-xs text-amber-300">
-                                        {focusError}
+                                        {orderError}
                                     </p>
                                 )}
-                                <div className="grid gap-4 lg:grid-cols-3">
+                                <div className="space-y-4">
                                     <OrderColumn title="Focus Queue" count={orders.focusQueue.length}>
                                         {orders.focusQueue.length > 0 ? (
                                             orders.focusQueue.map((item) => (
-                                                <AssignmentItem
+                                                <FocusAssignmentItem
                                                     key={item.id}
-                                                    title={item.title}
-                                                    meta={`${item.course} • ${formatDueDate(item.dueDate)}`}
-                                                    id={item.id}
-                                                    priority={item.priority}
+                                                    item={item}
                                                     onComplete={completeAssignment}
                                                 />
                                             ))
@@ -666,50 +795,77 @@ export default function MedicalUnitPage() {
                                         )}
                                     </OrderColumn>
 
-                                    <OrderColumn title="Due Soon" count={orders.dueSoon.length}>
-                                        {orders.dueSoon.length > 0 ? (
-                                            orders.dueSoon.map((item) => (
-                                                <AssignmentItem
-                                                    key={item.id}
-                                                    title={item.title}
-                                                    meta={`${item.course} • ${formatDueDate(item.dueDate)}`}
-                                                    id={item.id}
-                                                    priority={item.priority}
-                                                    onComplete={completeAssignment}
-                                                    onFocus={addToFocusQueue}
-                                                    isFocusing={focusingAssignmentId === item.id}
-                                                />
-                                            ))
-                                        ) : (
-                                            <p className="text-sm uppercase tracking-[0.2em] text-slate-500">
-                                                ✓ Clear
-                                            </p>
-                                        )}
-                                    </OrderColumn>
+                                    <div className="grid gap-4 lg:grid-cols-3">
+                                        <OrderColumn title="Overdue" count={orders.overdue.length}>
+                                            {orders.overdue.length > 0 ? (
+                                                orders.overdue.map((item) => (
+                                                    <AssignmentItem
+                                                        key={item.id}
+                                                        title={item.title}
+                                                        meta={`${item.course} • ${formatDueDate(item.dueDate)}`}
+                                                        id={item.id}
+                                                        priority={item.priority}
+                                                        onComplete={completeAssignment}
+                                                        onFocus={addToFocusQueue}
+                                                        onSkip={skipAssignment}
+                                                        isFocusing={focusingAssignmentId === item.id}
+                                                        isSkipping={skippingAssignmentId === item.id}
+                                                    />
+                                                ))
+                                            ) : (
+                                                <p className="text-sm uppercase tracking-[0.2em] text-slate-500">
+                                                    ✓ Clear
+                                                </p>
+                                            )}
+                                        </OrderColumn>
 
-                                    <OrderColumn
-                                        title="Plan Ahead"
-                                        count={orders.nextCritical.length}
+                                        <OrderColumn title="Due Soon" count={orders.dueSoon.length}>
+                                            {orders.dueSoon.length > 0 ? (
+                                                orders.dueSoon.map((item) => (
+                                                    <AssignmentItem
+                                                        key={item.id}
+                                                        title={item.title}
+                                                        meta={`${item.course} • ${formatDueDate(item.dueDate)}`}
+                                                        id={item.id}
+                                                        priority={item.priority}
+                                                        onComplete={completeAssignment}
+                                                        onFocus={addToFocusQueue}
+                                                        onSkip={skipAssignment}
+                                                        isFocusing={focusingAssignmentId === item.id}
+                                                        isSkipping={skippingAssignmentId === item.id}
+                                                    />
+                                                ))
+                                            ) : (
+                                                <p className="text-sm uppercase tracking-[0.2em] text-slate-500">
+                                                    ✓ Clear
+                                                </p>
+                                            )}
+                                        </OrderColumn>
+
+                                        <OrderColumn
+                                            title="Plan Ahead"
+                                            count={orders.nextCritical.length}
                                         >
-                                        {orders.nextCritical.length > 0 ? (
-                                            orders.nextCritical.map((item) => (
-                                            <AssignmentItem
-                                                key={item.id}
-                                                title={item.title}
-                                                meta={`${item.course} • ${formatDueDate(item.dueDate)}`}
-                                                id={item.id}
-                                                priority={item.priority}
-                                                onComplete={completeAssignment}
-                                                onFocus={addToFocusQueue}
-                                                isFocusing={focusingAssignmentId === item.id}
-                                            />
-                                            ))
-                                        ) : (
-                                            <p className="text-sm uppercase tracking-[0.2em] text-slate-500">
-                                            ✓ Clear
-                                            </p>
-                                        )}
-                                    </OrderColumn>
+                                            {orders.nextCritical.length > 0 ? (
+                                                orders.nextCritical.map((item) => (
+                                                    <AssignmentItem
+                                                        key={item.id}
+                                                        title={item.title}
+                                                        meta={`${item.course} • ${formatDueDate(item.dueDate)}`}
+                                                        id={item.id}
+                                                        priority={item.priority}
+                                                        onComplete={completeAssignment}
+                                                        onFocus={addToFocusQueue}
+                                                        isFocusing={focusingAssignmentId === item.id}
+                                                    />
+                                                ))
+                                            ) : (
+                                                <p className="text-sm uppercase tracking-[0.2em] text-slate-500">
+                                                    ✓ Clear
+                                                </p>
+                                            )}
+                                        </OrderColumn>
+                                    </div>
                                 </div>
                             </Panel>
                         </div>
