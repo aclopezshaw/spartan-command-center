@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { hasAuthorizedSession } from "@/lib/auth";
 import { NavigationAvailabilityProvider } from "@/app/components/NavigationAvailability";
-import { isFireteamNavigationUnlocked } from "@/lib/notion";
+import { getPersonnelShellState } from "@/lib/notion";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -15,16 +15,19 @@ export default async function ProtectedLayout({
     redirect("/");
   }
 
-  let fireteamUnlocked = false;
+  let personnelShellState = {
+    fireteamUnlocked: false,
+    currentRank: "Recruit",
+  };
 
   try {
-    fireteamUnlocked = await isFireteamNavigationUnlocked();
+    personnelShellState = await getPersonnelShellState();
   } catch (error) {
-    console.error("Unable to resolve Fireteam navigation access", error);
+    console.error("Unable to resolve personnel shell state", error);
   }
 
   return (
-    <NavigationAvailabilityProvider fireteamUnlocked={fireteamUnlocked}>
+    <NavigationAvailabilityProvider {...personnelShellState}>
       {children}
     </NavigationAvailabilityProvider>
   );

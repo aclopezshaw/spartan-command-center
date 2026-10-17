@@ -51,6 +51,11 @@ Each row represents one campaign phase.
 `Status`, campaign-level start/length/end fields, and campaign progress mirrors
 were removed. Rollover writes and verifies `Phase Status` only.
 
+`Campaign Number` is the primary sequence scope for adjacent-phase lookup.
+Authorized relaunch records may carry a distinct run number, so the application
+falls back to the stable `Campaign Name` when no later numbered phase exists in
+that run. `Phase Number` still determines the immediate next phase.
+
 ### XP and medal thresholds
 
 | Property | Type | Contract |

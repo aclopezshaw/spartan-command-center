@@ -587,30 +587,48 @@ export async function getActiveCampaignEventState(): Promise<CampaignEventState>
       : null;
   let nextPhaseName: string | null = null;
 
-  if (
-    campaignPhaseDataSourceId &&
-    phaseNumber !== null &&
-    campaignNumber !== null
-  ) {
-    const nextPhaseResponse = await notion.dataSources.query({
-      data_source_id: campaignPhaseDataSourceId,
-      filter: {
-        and: [
-          {
-            property: "Campaign Number",
-            number: { equals: campaignNumber },
-          },
-          {
-            property: "Phase Number",
-            number: { greater_than: phaseNumber },
-          },
-        ],
-      },
-      sorts: [{ property: "Phase Number", direction: "ascending" }],
-      page_size: 1,
-    });
-    const nextPhase =
-      nextPhaseResponse.results[0] as unknown as CampaignPhasePage | undefined;
+  if (campaignPhaseDataSourceId && phaseNumber !== null) {
+    const findNextPhase = async (
+      campaignFilter:
+        | { property: string; number: { equals: number } }
+        | { property: string; title: { equals: string } }
+    ) => {
+      const response = await notion.dataSources.query({
+        data_source_id: campaignPhaseDataSourceId,
+        filter: {
+          and: [
+            campaignFilter,
+            {
+              property: "Phase Number",
+              number: { greater_than: phaseNumber },
+            },
+          ],
+        },
+        sorts: [{ property: "Phase Number", direction: "ascending" }],
+        page_size: 1,
+      });
+
+      return response.results[0] as unknown as
+        | CampaignPhasePage
+        | undefined;
+    };
+    let nextPhase = campaignNumber !== null
+      ? await findNextPhase({
+          property: "Campaign Number",
+          number: { equals: campaignNumber },
+        })
+      : undefined;
+
+    // Relaunched phases can have a distinct run number while still belonging
+    // to the same named campaign. Preserve the numeric lookup first, then use
+    // the stable campaign identity so an upcoming phase is not orphaned.
+    if (!nextPhase && campaignName) {
+      nextPhase = await findNextPhase({
+        property: "Campaign Name",
+        title: { equals: campaignName },
+      });
+    }
+
     nextPhaseName = nextPhase
       ? getPhaseName(nextPhase.properties)
       : null;
@@ -2269,21 +2287,41 @@ export async function getAlexServiceRecord() {
   });
 }
 
-/** Resolves the lightweight, durable unlock used by shared navigation. */
-export async function isFireteamNavigationUnlocked() {
+/** Resolves durable identity used by the protected navigation and page header. */
+export async function getPersonnelShellState() {
   const serviceRecord = (await findAlexServiceRecord()) as
     | AlexServiceRecordPage
     | null;
 
   if (!serviceRecord) {
-    return false;
+    return {
+      fireteamUnlocked: false,
+      currentRank: "Recruit",
+    };
   }
 
   const persisted = getPersistedFireteamAssignment(serviceRecord);
-  return (
-    persisted.status === "Complete" &&
-    persisted.fireteamId === FIRETEAM_EPSILON.id
-  );
+  const currentRankRelations =
+    serviceRecord.properties["Current Rank"]?.relation ?? [];
+  const currentRankPage =
+    currentRankRelations.length === 1
+      ? ((await getNotionClient().pages.retrieve({
+          page_id: currentRankRelations[0].id,
+        })) as unknown as RankProgressionPage)
+      : null;
+
+  return {
+    fireteamUnlocked:
+      persisted.status === "Complete" &&
+      persisted.fireteamId === FIRETEAM_EPSILON.id,
+    currentRank:
+      currentRankPage?.properties.Rank?.title?.[0]?.plain_text ?? "Recruit",
+  };
+}
+
+/** Resolves the lightweight, durable unlock used by shared navigation. */
+export async function isFireteamNavigationUnlocked() {
+  return (await getPersonnelShellState()).fireteamUnlocked;
 }
 
 type RankProgressionPage = {

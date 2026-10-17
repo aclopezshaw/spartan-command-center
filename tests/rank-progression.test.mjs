@@ -86,6 +86,8 @@ test("progress is measured within the current rank band", () => {
 
   assert.equal(progression.nextRank, "Bronze II");
   assert.equal(progression.nextRankXp, 16_000);
+  assert.equal(progression.xpIntoCurrentRank, 4_000);
+  assert.equal(progression.rankBandXp, 8_000);
   assert.equal(progression.xpToNextRank, 4_000);
   assert.equal(progression.progressPercent, 50);
 });

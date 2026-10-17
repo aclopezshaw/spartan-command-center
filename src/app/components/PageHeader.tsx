@@ -18,7 +18,7 @@ export default function PageHeader({
   title: string;
   personnelInsignia?: readonly PersonnelInsignia[];
 }) {
-  const { fireteamUnlocked } = useNavigationAvailability();
+  const { fireteamUnlocked, currentRank } = useNavigationAvailability();
   const visiblePersonnelInsignia =
     personnelInsignia.length > 0
       ? personnelInsignia
@@ -42,8 +42,8 @@ export default function PageHeader({
         <div className="relative grid h-[90px] w-[78px] place-items-center sm:h-[108px] sm:w-[92px]">
           <div className="absolute inset-2 rounded-full bg-cyan-400/20 blur-xl" />
           <Image
-            src={getRankInsigniaPath("Recruit")}
-            alt="Recruit rank insignia"
+            src={getRankInsigniaPath(currentRank)}
+            alt={`${currentRank} rank insignia`}
             width={88}
             height={88}
             className="relative z-10 h-[82px] w-[82px] object-contain drop-shadow-[0_0_12px_rgba(34,211,238,0.55)] sm:h-[97px] sm:w-[97px]"

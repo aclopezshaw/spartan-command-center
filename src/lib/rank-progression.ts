@@ -54,6 +54,8 @@ export type RankProgression = {
   promotionsAvailable: number;
   currentXp: number;
   nextRankXp: number;
+  xpIntoCurrentRank: number;
+  rankBandXp: number;
   xpToNextRank: number;
   progressPercent: number;
   thresholdMet: boolean;
@@ -146,15 +148,16 @@ export function buildRankProgression(
   const rankBandSize = nextDefinition
     ? nextDefinition.minimumXp - currentDefinition.minimumXp
     : 0;
-  const progressPercent =
+  const xpIntoCurrentRank =
     rankBandSize > 0
       ? Math.min(
-          100,
-          Math.max(
-            0,
-            ((currentXp - currentDefinition.minimumXp) / rankBandSize) * 100
-          )
+          rankBandSize,
+          Math.max(0, currentXp - currentDefinition.minimumXp)
         )
+      : 0;
+  const progressPercent =
+    rankBandSize > 0
+      ? (xpIntoCurrentRank / rankBandSize) * 100
       : 100;
 
   return {
@@ -167,6 +170,8 @@ export function buildRankProgression(
     ),
     currentXp,
     nextRankXp,
+    xpIntoCurrentRank,
+    rankBandXp: rankBandSize,
     xpToNextRank,
     progressPercent,
     thresholdMet,

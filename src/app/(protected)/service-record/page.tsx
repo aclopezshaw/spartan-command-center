@@ -378,6 +378,8 @@ const properties = (freshRecord as any).properties;
     };
 
     const xpProgress = promotion.progression?.progressPercent ?? 0;
+    const rankBandXp = promotion.progression?.rankBandXp ?? 0;
+    const xpIntoCurrentRank = promotion.progression?.xpIntoCurrentRank ?? 0;
     const campaignXp = phaseXpSummary?.earnedXp ?? spartan.xp;
     const phaseOwnedMaxXp =
         (activeCampaignEventState.maxHabitXp ?? 0) +
@@ -609,14 +611,17 @@ const properties = (freshRecord as any).properties;
                                 </div>
 
                                 <div className="mt-6 flex justify-between text-sm text-slate-300 sm:mt-8">
-                                    <span>XP Progress</span>
+                                    <span>{spartan.rank} Progress</span>
                                     <span>
-                                        {spartan.xp} / {spartan.nextRankXp} XP · {xpProgress}%
+                                        {xpIntoCurrentRank.toLocaleString()} / {rankBandXp.toLocaleString()} XP · {xpProgress}%
                                     </span>
                                 </div>
                                 <div className="pt-3">
                                     <ProgressBar value={xpProgress} />
                                 </div>
+                                <p className="mt-2 text-right text-xs text-slate-500">
+                                    Lifetime Service XP · {spartan.xp.toLocaleString()}
+                                </p>
                             </div>
 
                             <div className="border border-cyan-700/50 bg-black/60 p-5">
