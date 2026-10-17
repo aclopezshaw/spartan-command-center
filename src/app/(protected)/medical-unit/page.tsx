@@ -405,33 +405,6 @@ function RecordStat({
     );
 }
 
-function ActiveCourseRoster({ courses }: { courses: PipelineCourse[] }) {
-    return (
-        <div className="mb-4 border-b border-cyan-900/60 pb-4">
-            <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
-                Active Courses
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-                {courses.length > 0 ? (
-                    courses.map((course) => (
-                        <span
-                            key={course.course}
-                            className="border border-cyan-800/70 bg-cyan-950/40 px-2 py-1 text-xs font-bold text-cyan-200"
-                            title={course.name}
-                        >
-                            {course.course}
-                        </span>
-                    ))
-                ) : (
-                    <span className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                        No active courses
-                    </span>
-                )}
-            </div>
-        </div>
-    );
-}
-
 function getPriorityColor(priority: string) {
     switch (priority.toLowerCase()) {
         case "high":
@@ -772,7 +745,6 @@ export default function MedicalUnitPage() {
                             </Panel>
 
                             <Panel title="Today's Orders">
-                                <ActiveCourseRoster courses={pipeline} />
                                 {orderError && (
                                     <p className="mb-3 text-xs text-amber-300">
                                         {orderError}
@@ -943,7 +915,6 @@ export default function MedicalUnitPage() {
                             </Panel>
 
                             <Panel title="Medical Service Record">
-                                <ActiveCourseRoster courses={pipeline} />
                                 <div className="grid gap-3 text-sm">
                                     <RecordStat
                                         label="Assignments Completed"
