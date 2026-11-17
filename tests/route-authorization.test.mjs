@@ -7,6 +7,7 @@ const apiRoot = path.resolve("src/app/api");
 const publicRoutes = new Set([
   path.join(apiRoot, "login/route.ts"),
   path.join(apiRoot, "logout/route.ts"),
+  path.join(apiRoot, "mobile/session/route.ts"),
 ]);
 
 async function findRouteHandlers(directory) {
@@ -56,4 +57,16 @@ test("the login route issues the signed cookie, not the legacy value", async () 
     source,
     /cookies\.set\(\s*["']scp_auth["']\s*,\s*["']authorized["']/
   );
+});
+
+test("the mobile session route verifies credentials before issuing a signed token", async () => {
+  const source = await readFile(
+    path.join(apiRoot, "mobile/session/route.ts"),
+    "utf8"
+  );
+
+  assert.match(source, /constantTimeEqual/);
+  assert.match(source, /createAuthorizedSessionToken/);
+  assert.match(source, /tokenType:\s*["']Bearer["']/);
+  assert.doesNotMatch(source, /response\.cookies\.set/);
 });

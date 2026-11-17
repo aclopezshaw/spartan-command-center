@@ -62,6 +62,18 @@ const fireteamNavigation: GroupedNavItem = {
   ],
 };
 
+const commandNavigation: GroupedNavItem = {
+  type: "group",
+  label: "Command",
+  destinations: [
+    { label: "Leadership Dashboard", href: "/command/dashboard" },
+    { label: "Leadership Roster", href: "/command" },
+    { label: "Command Trust", href: "/command/trust" },
+    { label: "Battalion Cohesion", href: "/command/cohesion" },
+    { label: "Battalion Rankings", href: "/command/leaderboard" },
+  ],
+};
+
 const trailingNavigation: NavItem[] = [
   {
     type: "direct",
@@ -313,12 +325,20 @@ function MobileNavigation({
 
 export default function NavBar() {
   const pathname = usePathname();
-  const { fireteamUnlocked } = useNavigationAvailability();
+  const { fireteamUnlocked, commandUnlocked } =
+    useNavigationAvailability();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const navigation = fireteamUnlocked
-    ? [...baseNavigation, fireteamNavigation, ...trailingNavigation]
-    : [...baseNavigation, ...trailingNavigation];
+  const progressionNavigation: NavItem[] = [];
+
+  if (fireteamUnlocked) progressionNavigation.push(fireteamNavigation);
+  if (commandUnlocked) progressionNavigation.push(commandNavigation);
+
+  const navigation = [
+    ...baseNavigation,
+    ...progressionNavigation,
+    ...trailingNavigation,
+  ];
 
   return (
     <nav

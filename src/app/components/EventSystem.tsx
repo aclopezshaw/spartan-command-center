@@ -6,8 +6,9 @@ import { areAllCampaignEventsComplete, getActiveEvent, getNextEvent } from "@/li
 import { getEventReadinessCopy } from "@/lib/event-readiness";
 import { getEventOutcomeState } from "@/lib/event-outcome";
 import { getCampaignPhaseDisplayName } from "@/lib/campaign";
-import { CampaignEvent } from "@/data/events";
+import { CampaignEvent, PHASE_THREE_EVENT_IDS } from "@/data/events";
 import type { CeremonialEvent } from "@/lib/ceremonial-events";
+import type { CampaignBoundaryState } from "@/lib/campaign-intermission";
 import HudPanel from "../components/HudPanel";
 import { NextEventPanel } from "../components/NextEventPanel";
 
@@ -23,9 +24,14 @@ type CompletionResponse = {
 export function EventSystem({
   children,
   ceremonialEvent = null,
+  campaignBoundary = {
+    mode: "active_phase",
+    intermissionDay: null,
+  },
 }: {
   children: ReactNode;
   ceremonialEvent?: CeremonialEvent | null;
+  campaignBoundary?: CampaignBoundaryState;
 }) {
   const [completedEventIds, setCompletedEventIds] = useState<string[]>([]);
   const [events, setEvents] = useState<CampaignEvent[]>([]);
@@ -213,11 +219,16 @@ export function EventSystem({
     eventPanel = (
       <HudPanel title="Campaign Events" titleClassName="text-emerald-300 tracking-[0.3em]">
         <p className="text-sm font-bold uppercase leading-tight text-emerald-200">
-          All Events Complete for This Phase
+          {campaignBoundary.mode === "intermission"
+            ? "Intermission Active"
+            : "All Events Complete for This Phase"}
         </p>
         <p className="mt-2 text-xs text-slate-400">
-          {getCampaignPhaseDisplayName(phaseName)} transition awaits its separate
-          operational criteria.
+          {campaignBoundary.mode === "intermission"
+            ? "Phase II records are preserved. Daily and weekly operations continue while Phase III awaits deployment authorization."
+            : campaignBoundary.mode === "final_operational_day"
+              ? "Final operational day. Intermission begins tomorrow unless Phase III receives deployment authorization."
+              : `${getCampaignPhaseDisplayName(phaseName)} transition awaits its separate operational criteria.`}
         </p>
       </HudPanel>
     );
@@ -243,6 +254,7 @@ export function EventSystem({
           <p id="event-review-title" className="mt-3 text-lg font-bold uppercase text-slate-100">{activeEvent.title}</p>
           <p className="mt-3 font-bold text-slate-100">Requirement: {getEventReadinessCopy(activeEvent)}</p>
           <p className="mt-2 text-slate-400">Completion is confirmed only after the operational record saves.</p>
+          {PHASE_THREE_EVENT_IDS.some(id => id === activeEvent.id) ? <p className="mt-3 text-amber-200">Submitting this review awards +{activeEvent.type === "Major Event" ? 10 : 5} Battalion Cohesion on a pass or deducts {activeEvent.type === "Major Event" ? 10 : 5} on failure. Every failed attempt counts. Opening or closing this review changes nothing.</p> : null}
           {completionError && (
             <p role="alert" className="mt-3 border border-amber-400/50 bg-amber-500/10 p-2 text-amber-200">
               {completionError}
@@ -253,7 +265,7 @@ export function EventSystem({
             disabled={isSaving}
             className="mt-4 w-full border border-emerald-400 bg-emerald-500/10 py-2 font-bold uppercase tracking-[0.2em] text-emerald-300 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isSaving ? "Saving Event…" : "Mark Event Complete"}
+            {isSaving ? "Saving Event…" : PHASE_THREE_EVENT_IDS.some(id => id === activeEvent.id) ? "Submit Event Review" : "Mark Event Complete"}
           </button>
           <button
             type="button"

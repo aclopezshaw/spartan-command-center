@@ -43,9 +43,11 @@ Approved behavior includes:
 - later consistent behavior provides a visible recovery path; and
 - the player can see current Trust, trend, recent changes, neglect risk, recovery guidance, and the next meaningful threshold.
 
-Exact input lists, history windows, thresholds, floors, caps, decay amounts, and recovery rates remain tunable implementation parameters requiring later product approval.
+The product owner approved the initial company-level 50/100 baseline, +1/+2 daily gains, +2 weekly gains, third-confirmed-day neglect, three-point weekly loss cap, missing/excused-day protection, and normal-gain recovery on 2026-11-10. The implemented v1 evidence and persistence boundaries are recorded in [Command Trust Contract](../COMMAND_TRUST_CONTRACT.md). Leadership-event effects and meaningful progression thresholds still require later product approval.
 
 ### Battalion Command and recoverable consequences
+
+The owner approved one shared Battalion Cohesion score on 2026-11-10: 50/100 baseline, Minor ±5, Major ±10. Every actual failed review deducts points; a successful retry earns its normal gain once without an extra refund. This is distinct from per-company habit-driven Trust. The implemented event journal and recovery boundary are documented in [Battalion Cohesion Contract](../BATTALION_COHESION_CONTRACT.md); Phase III remains subject to explicit activation.
 
 Battalion Command applies authoritative Command Trust through leadership decisions and events. Persistent company and battalion state may include readiness, morale, cohesion, performance, identity, reputation, behavioral tendencies, current concerns, and operational history.
 
@@ -97,7 +99,7 @@ Rejected because 0.8 owns leadership qualification while 0.9 owns specialization
 
 ## Implementation status
 
-**Planned.** Release Operations and the SDCB contain the approved 0.8 release, epic, ticket, and exit-criteria structure. The repository does not implement Command Assignment, Command Trust, Battalion Command, or Command School qualification.
+**Partially implemented.** The repository implements Command Assignment, Athena roster, ceremony, one-time unlock, gated navigation, deterministic company Trust rules, persisted evidence/transaction snapshots, day-confirmation/excusal controls, source reconciliation and live company values when Phase III is active. Verified trend/risk/recovery views are implemented. Trust tier thresholds, Battalion Command outcomes, qualification and active-phase production mutation verification remain planned.
 
 ## Validation
 

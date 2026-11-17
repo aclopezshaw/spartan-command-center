@@ -40,6 +40,25 @@ const PHASE_TWO_BACKGROUNDS = [
   },
 ] as const;
 
+const PHASE_THREE_BACKGROUNDS = [
+  { startHour: 5, endHour: 8, src: "/images/hud/phase-iii-command-morning.png" },
+  { startHour: 8, endHour: 11, src: "/images/hud/phase-iii-command-classroom.png" },
+  { startHour: 11, endHour: 13, src: "/images/hud/phase-iii-command-mess.png" },
+  { startHour: 13, endHour: 16, src: "/images/hud/phase-iii-command-afternoon.png" },
+  { startHour: 16, endHour: 20, src: "/images/hud/phase-iii-command-evening.png" },
+  { startHour: 20, endHour: 22, src: "/images/hud/phase-iii-command-night-prep.png" },
+] as const;
+
+export const PHASE_THREE_HUD_FALLBACK = "/images/hud/phase-iii-command-night.png";
+
+export function isPhaseThreeHudPhase(phaseName: string | null | undefined) {
+  return /^phase iii(?:\s|[-—–:]|$)/.test(phaseName?.trim().toLowerCase() ?? "");
+}
+
+function isPhaseTwoHudPhase(phaseName: string | null | undefined) {
+  return /^phase ii(?:\s|[-—–:]|$)/.test(phaseName?.trim().toLowerCase() ?? "");
+}
+
 function findBackgroundForHour(
   hour: number,
   backgrounds: ReadonlyArray<{
@@ -47,34 +66,42 @@ function findBackgroundForHour(
     endHour: number;
     src: string;
   }>,
-  fallback: string
+  fallback: string,
 ) {
   return (
     backgrounds.find(
-      ({ startHour, endHour }) => hour >= startHour && hour < endHour
+      ({ startHour, endHour }) => hour >= startHour && hour < endHour,
     )?.src ?? fallback
   );
 }
 
 export function getHudBackground(
   phaseName: string | null | undefined,
-  operationalHour: number
+  operationalHour: number,
 ) {
   if (operationalHour < 0 || operationalHour > 23) {
     throw new RangeError("Operational hour must be between 0 and 23.");
   }
 
-  if (phaseName?.trim().toLowerCase().startsWith("phase ii")) {
+  if (isPhaseThreeHudPhase(phaseName)) {
+    return findBackgroundForHour(
+      operationalHour,
+      PHASE_THREE_BACKGROUNDS,
+      PHASE_THREE_HUD_FALLBACK,
+    );
+  }
+
+  if (isPhaseTwoHudPhase(phaseName)) {
     return findBackgroundForHour(
       operationalHour,
       PHASE_TWO_BACKGROUNDS,
-      "/images/hud/phase-ii-fireteam-room-night.png"
+      "/images/hud/phase-ii-fireteam-room-night.png",
     );
   }
 
   return findBackgroundForHour(
     operationalHour,
     PHASE_ONE_BACKGROUNDS,
-    "/images/hud-bedtime.png"
+    "/images/hud-bedtime.png",
   );
 }

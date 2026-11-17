@@ -18,6 +18,7 @@ import {
   getRequiredNotionId,
 } from "@/lib/notion-client";
 import { collectNotionPages } from "@/lib/notion-pagination";
+import { calculateClassworkAchievementStats } from "@/lib/classwork-achievements";
 import {
   getAchievementReadinessOperationId,
   isReadinessCategory,
@@ -112,6 +113,10 @@ async function getWeeklyCheckboxStats(propertyName: string): Promise<ObjectiveSt
     .map((value: string) => value.split("T")[0]);
   const { startDateKey: currentWeek } = getOperationalWeekRange(new Date(), 0);
 
+  if (propertyName === "SMU Classwork") {
+    return calculateClassworkAchievementStats(completedWeeks, currentWeek);
+  }
+
   return {
     totalCompletions: completedWeeks.length,
     currentStreak: calculateWeeklyAchievementStreak(
@@ -152,6 +157,9 @@ async function getObjectiveStats(objective: string): Promise<ObjectiveStats> {
 
     case "Plan":
       return getWeeklyCheckboxStats("Planning");
+
+    case "Classwork":
+      return getWeeklyCheckboxStats("SMU Classwork");
 
     default:
       return {
@@ -325,6 +333,7 @@ export async function evaluateAchievements() {
   const achievements = await getUnearnedAchievements();
 
   const awarded: string[] = [];
+  const statsByObjective = new Map<string, Promise<ObjectiveStats>>();
 
   for (const rawAchievement of achievements) {
     const achievement = mapAchievement(rawAchievement);
@@ -337,7 +346,13 @@ export async function evaluateAchievements() {
       continue;
     }
 
-    const stats = await getObjectiveStats(achievement.objective);
+    // All tiers for an objective share one completion snapshot per evaluation.
+    let statsPromise = statsByObjective.get(achievement.objective);
+    if (!statsPromise) {
+      statsPromise = getObjectiveStats(achievement.objective);
+      statsByObjective.set(achievement.objective, statsPromise);
+    }
+    const stats = await statsPromise;
 
     if (isAchievementEarned(achievement, stats)) {
       await awardAchievement(achievement, today);

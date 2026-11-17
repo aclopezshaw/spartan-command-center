@@ -1,0 +1,3 @@
+export default function LeadershipDashboardLoading() {
+  return <main aria-busy="true" aria-label="Loading Leadership Dashboard" className="min-h-screen bg-black p-4 font-mono text-slate-100 sm:p-6"><section className="mx-auto max-w-7xl border border-cyan-600/60 bg-slate-950/90 p-6"><p role="status" className="text-xs uppercase tracking-[0.3em] text-cyan-400">Loading command overview…</p><div aria-hidden="true" className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[0, 1, 2, 3].map(item => <div key={item} className="h-40 animate-pulse border border-slate-800 bg-slate-900/50 motion-reduce:animate-none" />)}</div></section></main>;
+}

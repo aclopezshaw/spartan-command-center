@@ -1,9 +1,16 @@
-import { CampaignEvent, eventCatalog, SpartanEvent, EventStatus } from "@/data/events";
+import {
+  eventCatalog,
+} from "../data/events.ts";
+import type {
+  CampaignEvent,
+  EventStatus,
+  SpartanEvent,
+} from "../data/events.ts";
 import {
   getFirstActiveScheduledEvent,
   getNextScheduledEvent,
   getScheduledEventStatus,
-} from "@/lib/event-schedule";
+} from "./event-schedule.ts";
 
 export function getEventStatus(
   event: SpartanEvent,
@@ -46,4 +53,10 @@ export function areAllCampaignEventsComplete(
   events: CampaignEvent[] | SpartanEvent[] = eventCatalog
 ) {
   return events.length > 0 && events.every((event) => completedEventIds.includes(event.id));
+}
+
+export function filterCampaignEventsByPhase<
+  T extends { phaseId: string | null },
+>(events: T[], phaseId: string) {
+  return events.filter((event) => event.phaseId === phaseId);
 }

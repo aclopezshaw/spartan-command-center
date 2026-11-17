@@ -134,3 +134,15 @@ Property names, relation targets, formula dependencies, integration
 permissions, rate limits, and external availability remain runtime
 dependencies. Missing configuration should fail with a clear server-side error
 without exposing credentials.
+
+## Daily SITREP creation and duplicate recovery
+
+**Implemented.** `getTodaySitrep` in `src/lib/notion.ts` captures the Denver date before asynchronous reads and delegates to `createDailySitrepResolver` in `src/lib/daily-sitrep.ts`. Concurrent requests for one Service Record/date share one pending operation per server process; other owners/dates remain independent. The resolver rechecks persisted evidence immediately before creation, reads after create, and recovers an ambiguous create timeout by reading rather than blindly issuing another create. Failed operations release their in-process key for later recovery.
+
+`findTodaySitrep` queries all matching pages scoped to both Mission Date and the canonical Spartan relation. `selectDailySitrep` rejects multiple matches instead of selecting the first page. Hydration and habit writers therefore fail closed on duplicate source evidence as Trust already does.
+
+**Technical debt.** This is not a distributed lock. Notion exposes no unique constraint or atomic create-if-absent for these source rows. Separate server processes can still race between final lookup and creation; any visible duplicate blocks subsequent reads/writes and requires deliberate reconciliation. Strict prevention across instances requires a separate durable uniqueness coordinator. No local file lock or laptop dependency is introduced.
+
+Recovery: inspect both pages' writable fields, ownership, notes, blocks and completed habits; retain all meaningful evidence. For identical empty duplicates only, preserve one deterministic original, save recovery evidence, archive the redundant page (recoverably), and verify exactly one unchanged active source remains. Never silently merge conflicting habits or dates. Refresh Trust, require current, and repeat refresh to verify the same snapshot is reused.
+
+`tests/daily-sitrep.test.mjs` covers 30 concurrent readers, owner/date separation, competing-writer visibility, timeout-after-commit recovery, failure release, unverified writes and duplicate rejection.

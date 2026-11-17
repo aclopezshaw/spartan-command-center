@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   evaluateIndividualCompletion,
+  getIndividualCompletionProgressionStage,
   toPersistedIndividualCompletionStatus,
 } from "../src/lib/individual-completion.ts";
 
@@ -17,6 +18,14 @@ const completeInput = {
   persistedStatus: "Locked",
   progressionStage: "Individual",
 };
+
+test("reconciling older Individual completion preserves earned Command School progression", () => {
+  assert.equal(getIndividualCompletionProgressionStage("assigned", "Command School"), "Command School");
+  assert.equal(getIndividualCompletionProgressionStage("assigned", "Fireteam Member"), "Fireteam Member");
+  assert.equal(getIndividualCompletionProgressionStage("assigned", "Individual"), "Fireteam Member");
+  assert.equal(getIndividualCompletionProgressionStage("assigned", null), "Fireteam Member");
+  assert.equal(getIndividualCompletionProgressionStage("eligible", "Command School"), "Command School");
+});
 
 test("remains locked before the completion boundary", () => {
   const result = evaluateIndividualCompletion({

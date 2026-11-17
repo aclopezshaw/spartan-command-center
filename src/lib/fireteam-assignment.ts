@@ -160,7 +160,9 @@ export function isCanonicalFireteamAssignment(
     persisted.version !== FIRETEAM_ASSIGNMENT_VERSION ||
     persisted.operationId !== FIRETEAM_ASSIGNMENT_OPERATION_ID ||
     !persisted.assignedAt ||
-    persisted.progressionStage !== "Fireteam Member"
+    !["Fireteam Member", "Command School"].includes(
+      persisted.progressionStage ?? ""
+    )
   ) {
     return false;
   }

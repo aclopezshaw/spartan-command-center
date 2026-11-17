@@ -34,8 +34,10 @@ The checked-in Node harness covers:
 
 - signed-session integrity and private Route Handler authorization;
 - America/Denver date, week, and DST boundaries;
-- campaign rollover, phase XP, typed event-readiness boundaries, event scheduling, and event completion;
+- campaign rollover, phase XP, typed event-readiness boundaries, event scheduling, event completion, and the staged Phase III event contract;
 - event failure, campaign-day cooldown, retry-ready, terminal-failed, missed, and phase-complete outcomes;
+- Phase III phase filtering, exact readiness gates, three cascading retry reserves through day 55, the day-56 boundary, and Phase II standings isolation;
+- integrated Phase III Route Handler/store simulations across a full 56-day campaign, metric separation, three retries, exact XP, Day 56 trophies, Trust backfills, conflicting snapshots and interrupted writes;
 - Individual completion eligibility and Fireteam assignment recovery;
 - ceremonial presentation, conventional Promotion eligibility boundaries, Unit Cohesion, Fireteam standings, and Phase II HUD rollover;
 - the complete 38-asset rank-insignia naming, dimensions, and RGBA contract;
@@ -47,7 +49,7 @@ The checked-in Node harness covers:
 - readiness trend window boundaries, current-versus-prior velocity direction, and exclusion of older or future entries;
 - the lint-ratchet comparison policy itself.
 
-The suites exercise pure domain rules and serialized Notion property contracts.
+The suites exercise pure domain rules, serialized Notion property contracts and server stores/Route Handlers against in-memory session/Notion/clock boundaries.
 They do not contact the live Notion workspace. Live Notion availability,
 permissions, formulas, and schema drift still require proportionate deployment
 smoke tests for changes that touch those boundaries.

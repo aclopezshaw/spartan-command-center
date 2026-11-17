@@ -1,5 +1,12 @@
 export const WEEKLY_SERVICE_RECORD_PROPERTY = "🪖 Service Record";
 
+export const WEEKLY_RULES_EFFECTIVE_FROM = "2026-11-08";
+
+export function getWeeklyRules(weekStart: string | null | undefined) {
+  const current = Boolean(weekStart && weekStart >= WEEKLY_RULES_EFFECTIVE_FROM);
+  return { workoutTarget: current ? 2 : 3, workoutXp: current ? 100 : 200, classworkEnabled: current, weeklyMaximum: 300 };
+}
+
 type WeeklyOperationsRelationPage = {
   properties?: Record<
     string,
@@ -39,6 +46,9 @@ export function buildWeeklyOperationsProperties({
     Planning: {
       checkbox: false,
     },
+    ...(getWeeklyRules(weekStart).classworkEnabled
+      ? { "SMU Classwork": { checkbox: false } }
+      : {}),
     [WEEKLY_SERVICE_RECORD_PROPERTY]: {
       relation: [
         {

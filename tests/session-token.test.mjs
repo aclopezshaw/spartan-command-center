@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createSessionToken,
+  getBearerToken,
   SESSION_MAX_AGE_SECONDS,
   verifySessionToken,
 } from "../src/lib/session-token.ts";
@@ -74,4 +75,11 @@ test("rejects a token issued materially in the future", () => {
   );
 
   assert.equal(verifySessionToken(token, secret, issuedAt), false);
+});
+
+test("extracts only a strict Bearer authorization token", () => {
+  assert.equal(getBearerToken("Bearer signed.token"), "signed.token");
+  assert.equal(getBearerToken("bearer signed.token"), null);
+  assert.equal(getBearerToken("Bearer signed.token extra"), null);
+  assert.equal(getBearerToken(null), null);
 });

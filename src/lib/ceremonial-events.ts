@@ -57,6 +57,35 @@ const fireteamAssignmentOrder: CeremonialEvent = {
   },
 };
 
+const commandAssignmentOrder: CeremonialEvent = {
+  id: "command-assignment",
+  kind: "ceremonial",
+  ceremonyType: "command_assignment",
+  title: "Command Assignment",
+  orderLabel: "Command Orders Received",
+  destination: "SCP Command Assembly Hall",
+  href: "/assembly-hall",
+  serviceHistoryEntryType: "Assignment",
+  rewards: {
+    xp: 0,
+    readiness: 0,
+    standings: 0,
+  },
+};
+
+export function getCommandCeremonialEvent(
+  commandAssignmentState: string
+): CeremonialEvent | null {
+  return [
+    "available",
+    "in_progress",
+    "finalizing",
+    "conflict",
+  ].includes(commandAssignmentState)
+    ? commandAssignmentOrder
+    : null;
+}
+
 export function getPromotionCeremonialEvent(
   promotionState: string,
   targetRank: string | null

@@ -17,7 +17,7 @@ const PNG_SIGNATURE = Buffer.from([
 ]);
 
 test("personnel insignia catalog uses unique stable IDs and paths", () => {
-  assert.equal(PERSONNEL_INSIGNIA_CATALOG.length, 1);
+  assert.equal(PERSONNEL_INSIGNIA_CATALOG.length, 2);
   assert.equal(
     new Set(PERSONNEL_INSIGNIA_CATALOG.map(({ id }) => id)).size,
     PERSONNEL_INSIGNIA_CATALOG.length
@@ -85,7 +85,7 @@ test("assignment history resolves the same canonical awarded patch", () => {
 test("every Fireteam patch source is a square PNG and unknown IDs fail closed", async () => {
   assert.equal(getFireteamPatch("unknown"), null);
 
-  for (const patch of Object.values(FIRETEAM_PATCHES)) {
+  for (const patch of [...Object.values(FIRETEAM_PATCHES), ...PERSONNEL_INSIGNIA_CATALOG]) {
     const absolutePath = path.join(process.cwd(), "public", patch.path);
     const png = await readFile(absolutePath);
 

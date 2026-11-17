@@ -4,6 +4,7 @@ import PageHeader from "../../components/PageHeader";
 import {
   getReadinessLedgerStatus,
   getServiceHistoryRecords,
+  getCommandAssignmentStatus,
 } from "@/lib/notion";
 import { formatDueDate } from "@/lib/date";
 import {
@@ -60,9 +61,10 @@ export default async function ServiceHistoryPage({
   const selectedFilter = parseServiceHistoryFilter(
     (await searchParams).filter
   );
-  const [history, readinessLedger] = await Promise.all([
+  const [history, readinessLedger, commandAssignment] = await Promise.all([
     getServiceHistoryRecords(),
     getReadinessLedgerStatus(),
+    getCommandAssignmentStatus().catch(() => null),
   ]);
   const filterCounts = countServiceHistoryFilters(history);
   const visibleHistory = history.filter((entry) =>
@@ -196,7 +198,7 @@ export default async function ServiceHistoryPage({
               <div className="mt-5 space-y-3">
                 {visibleHistory.map((entry) => {
                   const category = getServiceHistoryCategory(entry);
-                  const insignia = getServiceHistoryInsignia(entry);
+                  const insignia = getServiceHistoryInsignia({ ...entry, commandAssignment });
                   const theme =
                     entry.readinessPoints !== 0
                       ? readinessColor(entry.readinessCategory)

@@ -1,3 +1,5 @@
+import { ATHENA_COMMAND, COMMAND_ASSIGNMENT_HISTORY_TITLE, isCanonicalCommandAssignment, type CommandAssignmentEvaluation } from "./command-assignment.ts";
+
 export type FireteamPatchId =
   | "alpha"
   | "delta"
@@ -8,10 +10,10 @@ export type FireteamPatchId =
 export type PersonnelInsignia = {
   id: string;
   label: string;
-  kind: "fireteam";
+  kind: "fireteam" | "command";
   path: string;
-  awardedBy: "fireteam-assignment";
-  awardIdentityId: "fireteam-epsilon";
+  awardedBy: "fireteam-assignment" | "command-assignment";
+  awardIdentityId: "fireteam-epsilon" | "athena-command";
   awardHistoryTitle: string;
 };
 
@@ -57,8 +59,27 @@ export const FIRETEAM_EPSILON_INSIGNIA: PersonnelInsignia = {
   awardHistoryTitle: "Assigned to Fireteam Epsilon",
 };
 
+export const ATHENA_COMMAND_INSIGNIA: PersonnelInsignia = {
+  id: ATHENA_COMMAND.insigniaId,
+  label: ATHENA_COMMAND.name,
+  kind: "command",
+  path: ATHENA_COMMAND.patchPath,
+  awardedBy: "command-assignment",
+  awardIdentityId: ATHENA_COMMAND.id,
+  awardHistoryTitle: COMMAND_ASSIGNMENT_HISTORY_TITLE,
+};
+
+export function getAwardedCommandInsignia(assignment: CommandAssignmentEvaluation) {
+  return assignment.state === "completed" && assignment.historyCount === 1 &&
+    assignment.persisted.status === "Complete" &&
+    Boolean(assignment.persisted.commandTrustUnlockedAt) &&
+    isCanonicalCommandAssignment(assignment.persisted)
+    ? ATHENA_COMMAND_INSIGNIA : null;
+}
+
 export const PERSONNEL_INSIGNIA_CATALOG = [
   FIRETEAM_EPSILON_INSIGNIA,
+  ATHENA_COMMAND_INSIGNIA,
 ] as const;
 
 export function getPersonnelInsignia(id: string) {
@@ -93,9 +114,11 @@ export function getAwardedPersonnelInsignia({
 export function getServiceHistoryInsignia({
   entryType,
   title,
+  commandAssignment,
 }: {
   entryType: string;
   title: string;
+  commandAssignment?: CommandAssignmentEvaluation | null;
 }) {
   if (
     entryType.trim().toLowerCase() === "assignment" &&
@@ -104,5 +127,9 @@ export function getServiceHistoryInsignia({
     return FIRETEAM_EPSILON_INSIGNIA;
   }
 
+  if (entryType.trim().toLowerCase() === "assignment" &&
+      title.trim() === ATHENA_COMMAND_INSIGNIA.awardHistoryTitle && commandAssignment) {
+    return getAwardedCommandInsignia(commandAssignment);
+  }
   return null;
 }

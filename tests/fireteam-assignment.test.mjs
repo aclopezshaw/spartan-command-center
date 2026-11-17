@@ -104,6 +104,20 @@ test("recognizes only a verified identity plus exactly one history as complete",
   assert.equal(result.needsRecovery, false);
 });
 
+test("preserves the canonical Fireteam assignment after advancing to Command School", () => {
+  const result = evaluateFireteamAssignment({
+    eligibilityState: "assigned",
+    persisted: canonical({
+      status: "Complete",
+      progressionStage: "Command School",
+    }),
+    historyCount: 1,
+  });
+
+  assert.equal(result.state, "completed");
+  assert.equal(result.needsRecovery, false);
+});
+
 test("blocks a mismatched roster or identity instead of rerolling it", () => {
   const result = evaluateFireteamAssignment({
     eligibilityState: "assigned",

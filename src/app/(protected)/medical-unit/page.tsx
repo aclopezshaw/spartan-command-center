@@ -6,26 +6,15 @@ import {
     buildAcademicRecordSummary,
     formatAcademicCount,
 } from "@/lib/academic-record";
+import type {
+    AcademicAssignmentSummary,
+    AcademicTodayResponse,
+} from "@/lib/academic-orders";
 import NavBar from "../../components/NavBar";
 import PageHeader from "../../components/PageHeader";
 
-type OrderItem = {
-    id: string;
-    title: string;
-    course: string;
-    dueDate: string | null;
-    priority: string;
-    status: string;
-    focusQueue: boolean;
-    estimatedMinutes: number;
-};
-
-type OrdersResponse = {
-    focusQueue: OrderItem[];
-    overdue: OrderItem[];
-    dueSoon: OrderItem[];
-    nextCritical: OrderItem[];
-};
+type OrderItem = AcademicAssignmentSummary;
+type OrdersResponse = AcademicTodayResponse;
 
 type PipelineCourse = {
     course: string;
@@ -422,10 +411,13 @@ export const dynamic = "force-dynamic";
 
 export default function MedicalUnitPage() {
     const [orders, setOrders] = useState<OrdersResponse>({
+        schemaVersion: 1,
+        operationalDate: "",
+        dueSoonEndExclusive: "",
         focusQueue: [],
         overdue: [],
         dueSoon: [],
-        nextCritical: [],
+        planAhead: [],
     });
     const [pipeline, setPipeline] = useState<PipelineCourse[]>([]);
     const [focusingAssignmentId, setFocusingAssignmentId] = useState<string | null>(null);
@@ -437,7 +429,7 @@ export default function MedicalUnitPage() {
 
     async function loadOrders() {
         try {
-            const response = await fetch("/api/smu/orders", {
+            const response = await fetch("/api/v1/academic/today", {
                 cache: "no-store",
             });
             const data: OrdersResponse & { error?: string } =
@@ -568,10 +560,11 @@ export default function MedicalUnitPage() {
             }
 
             setOrders((current) => ({
+                ...current,
                 focusQueue: current.focusQueue.filter((item) => item.id !== id),
                 overdue: current.overdue.filter((item) => item.id !== id),
                 dueSoon: current.dueSoon.filter((item) => item.id !== id),
-                nextCritical: current.nextCritical.filter((item) => item.id !== id),
+                planAhead: current.planAhead.filter((item) => item.id !== id),
             }));
             await Promise.all([loadOrders(), loadPipeline()]);
         } catch (error) {
@@ -816,10 +809,10 @@ export default function MedicalUnitPage() {
 
                                         <OrderColumn
                                             title="Plan Ahead"
-                                            count={orders.nextCritical.length}
+                                            count={orders.planAhead.length}
                                         >
-                                            {orders.nextCritical.length > 0 ? (
-                                                orders.nextCritical.map((item) => (
+                                            {orders.planAhead.length > 0 ? (
+                                                orders.planAhead.map((item) => (
                                                     <AssignmentItem
                                                         key={item.id}
                                                         title={item.title}

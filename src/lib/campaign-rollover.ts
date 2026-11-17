@@ -44,7 +44,7 @@ function isDurablyComplete(event: RolloverEvent) {
 function getTransitionState(
   source: RolloverPhase,
   target: RolloverPhase,
-  historyRecordCount: number
+  historyRecordCount: number,
 ): Pick<RolloverEvaluation, "state" | "eligible" | "reasons"> {
   if (historyRecordCount > 1) {
     return {
@@ -69,9 +69,7 @@ function getTransitionState(
     (target.phaseStatus === "Upcoming" || targetPhaseActive)
   ) {
     const partiallyApplied =
-      sourcePhaseComplete ||
-      targetPhaseActive ||
-      historyExists;
+      sourcePhaseComplete || targetPhaseActive || historyExists;
     return {
       state: partiallyApplied ? "recovery" : "ready",
       eligible: true,
@@ -92,17 +90,19 @@ function getTransitionState(
 
 export function selectRolloverTransition(
   phases: RolloverPhase[],
-  operationalDate: string
+  operationalDate: string,
 ): RolloverTransition | null {
+  void operationalDate;
+
   const candidates = phases
     .flatMap((source) => {
       const target = phases.find(
         (phase) =>
           phase.campaignNumber === source.campaignNumber &&
-          phase.phaseNumber === source.phaseNumber + 1
+          phase.phaseNumber === source.phaseNumber + 1,
       );
 
-      if (!target || !target.startDate || target.startDate > operationalDate) {
+      if (!target) {
         return [];
       }
 
@@ -115,7 +115,20 @@ export function selectRolloverTransition(
 
       return [{ source, target }];
     })
-    .sort((a, b) => b.source.phaseNumber - a.source.phaseNumber);
+    .sort((a, b) => {
+      const priority = (transition: RolloverTransition) => {
+        if (transition.source.phaseStatus === "Active") return 3;
+        if (transition.target.phaseStatus === "Active") return 2;
+        if (transition.target.phaseStatus === "Upcoming") return 1;
+        return 0;
+      };
+
+      return (
+        priority(b) - priority(a) ||
+        b.source.campaignNumber - a.source.campaignNumber ||
+        b.source.phaseNumber - a.source.phaseNumber
+      );
+    });
 
   return candidates[0] ?? null;
 }
@@ -144,12 +157,20 @@ export function evaluateRollover({
   }
 
   const phaseEvents = events.filter(
-    (event) => event.phaseId === transition.source.id
+    (event) => event.phaseId === transition.source.id,
   );
   const incompleteEvents = phaseEvents
     .filter((event) => !isDurablyComplete(event))
     .map(({ id, title, status }) => ({ id, title, status }));
   const reasons: string[] = [];
+
+  if (!transition.target.startDate) {
+    reasons.push("The incoming phase start date is unset.");
+  } else if (transition.target.startDate > operationalDate) {
+    reasons.push(
+      `The incoming phase is not due until ${transition.target.startDate}.`,
+    );
+  }
 
   if (phaseEvents.length === 0) {
     reasons.push("The outgoing phase has no authoritative event records.");
@@ -159,14 +180,14 @@ export function evaluateRollover({
     reasons.push(
       `${incompleteEvents.length} outgoing phase event${
         incompleteEvents.length === 1 ? " is" : "s are"
-      } not durably complete.`
+      } not durably complete.`,
     );
   }
 
   const transitionState = getTransitionState(
     transition.source,
     transition.target,
-    historyRecordCount
+    historyRecordCount,
   );
   reasons.push(...transitionState.reasons);
 

@@ -1,6 +1,7 @@
 import Image from "next/image";
+import { getWeeklyRules } from "@/lib/weekly-operations";
 import HudCheckbox from "../../components/HudCheckbox";
-import HudPanel from "../../components/HudPanel"
+import HudPanel from "../../components/HudPanel";
 import NavBar from "../../components/NavBar";
 import PageHeader from "../../components/PageHeader";
 import { EventSystem } from "../../components/EventSystem";
@@ -11,14 +12,17 @@ import {
   getOperationalWeekRange,
 } from "@/lib/date";
 import { getCampaignPhaseDisplayName } from "@/lib/campaign";
+import { getCampaignBoundaryState } from "@/lib/campaign-intermission";
 import {
   getCeremonialEvent,
+  getCommandCeremonialEvent,
   getPromotionCeremonialEvent,
 } from "@/lib/ceremonial-events";
-import { getHudBackground } from "@/lib/hud-background";
+import { getHudBackground, isPhaseThreeHudPhase } from "@/lib/hud-background";
 import {
   getActiveCampaignEventState,
   getAlexServiceRecord,
+  getCommandAssignmentStatus,
   getFireteamAssignmentStatus,
   getOrCreateWeeklyOperations,
   getPromotionStatus,
@@ -130,13 +134,14 @@ export default async function CommandHudPage() {
     serviceRecordProperties["Designation"]?.title?.[0]?.plain_text ?? "NULL";
 
   const activeCampaignEventState = await getActiveCampaignEventState();
-  const [fireteamAssignment, promotion] = await Promise.all([
+  const [fireteamAssignment, commandAssignment, promotion] = await Promise.all([
     getFireteamAssignmentStatus(),
+    getCommandAssignmentStatus(),
     getPromotionStatus(),
   ]);
   const assignmentCeremonialEvent = getCeremonialEvent(
     fireteamAssignment.eligibility.state,
-    fireteamAssignment.state
+    fireteamAssignment.state,
   );
   const promotionOrderRank =
     promotion.pendingTransition?.toRank.name ??
@@ -145,10 +150,15 @@ export default async function CommandHudPage() {
       : null);
   const promotionCeremonialEvent = getPromotionCeremonialEvent(
     promotion.state,
-    promotionOrderRank
+    promotionOrderRank,
+  );
+  const commandCeremonialEvent = getCommandCeremonialEvent(
+    commandAssignment.state,
   );
   const ceremonialEvent =
-    assignmentCeremonialEvent ?? promotionCeremonialEvent;
+    assignmentCeremonialEvent ??
+    commandCeremonialEvent ??
+    promotionCeremonialEvent;
   const campaignStart = "2026-06-21";
   const today = getOperationalDateKey();
   const campaignDay =
@@ -156,41 +166,47 @@ export default async function CommandHudPage() {
     differenceInDateKeys(campaignStart, today) + 1;
   const campaignName =
     activeCampaignEventState.campaignName ?? "Campaign Unassigned";
-  const phaseName = getCampaignPhaseDisplayName(
-    activeCampaignEventState.phaseName
+  const campaignBoundary = getCampaignBoundaryState({
+    campaignDay: activeCampaignEventState.campaignDay,
+    phaseLength: activeCampaignEventState.phaseLength,
+    events: activeCampaignEventState.events,
+  });
+  const phaseName =
+    campaignBoundary.mode === "intermission"
+      ? "Intermission — Awaiting Phase III"
+      : campaignBoundary.mode === "final_operational_day"
+        ? "Phase II — Final Operational Day"
+        : getCampaignPhaseDisplayName(activeCampaignEventState.phaseName);
+  const isPhaseThreeActive = isPhaseThreeHudPhase(
+    activeCampaignEventState.phaseName,
   );
-  const campaignDayProgress = activeCampaignEventState.phaseLength
-    ? `${campaignDay} / ${activeCampaignEventState.phaseLength}`
-    : String(campaignDay);
+  const campaignDayProgress =
+    campaignBoundary.mode === "intermission"
+      ? `Intermission Day ${campaignBoundary.intermissionDay}`
+      : activeCampaignEventState.phaseLength
+        ? `${Math.min(campaignDay, activeCampaignEventState.phaseLength)} / ${activeCampaignEventState.phaseLength}`
+        : String(campaignDay);
   const { startDateKey: weekStart } = getOperationalWeekRange(new Date(), 0);
   const weeklyOps = (await getOrCreateWeeklyOperations(weekStart)) as any;
   const weeklyProps = weeklyOps.properties;
   const weeklyPageId = weeklyOps.id;
   const weeklyXp = weeklyProps["Weekly XP"]?.formula?.number ?? 0;
 
-  const workoutTarget = 3;
-  const workoutsThisWeek = await getWorkoutCountForWeek(
-    weekStart
-  );
+  const { workoutTarget, workoutXp, classworkEnabled } = getWeeklyRules(weekStart);
+  const workoutsThisWeek = await getWorkoutCountForWeek(weekStart);
   const workoutObjectiveComplete = workoutsThisWeek >= workoutTarget;
   const workoutLabel = `Workouts ${Math.min(workoutsThisWeek, workoutTarget)}/${workoutTarget}`;
   const workoutsComplete = weeklyProps["Workouts"]?.checkbox ?? false;
   if (workoutObjectiveComplete && !workoutsComplete) {
-    await updateWeeklyOperationCheckbox(
-      weeklyPageId,
-      "Workouts",
-      true
-    )
+    await updateWeeklyOperationCheckbox(weeklyPageId, "Workouts", true);
   }
-  
-  const shotComplete =
-    weeklyProps["Shot"]?.checkbox ?? false;
-  const planningComplete =
-    weeklyProps["Planning"]?.checkbox ?? false;
+
+  const shotComplete = weeklyProps["Shot"]?.checkbox ?? false;
+  const planningComplete = weeklyProps["Planning"]?.checkbox ?? false;
 
   const hudBackground = getHudBackground(
     activeCampaignEventState.phaseName,
-    getOperationalHour()
+    getOperationalHour(),
   );
 
   const dailyObjectives = [
@@ -206,9 +222,10 @@ export default async function CommandHudPage() {
   ] as const;
 
   const weeklyObjectives = [
-    [workoutLabel, 200, workoutObjectiveComplete],
+    [workoutLabel, workoutXp, workoutObjectiveComplete],
     ["T Shot", 50, shotComplete],
     ["Plan Week", 50, planningComplete],
+    ...(classworkEnabled ? [["SMU Classwork", 100, weeklyProps["SMU Classwork"]?.checkbox ?? false] as const] : []),
   ] as const;
 
   return (
@@ -241,9 +258,38 @@ export default async function CommandHudPage() {
                     {phaseName}
                   </p>
                   <p className="mt-1 text-xs uppercase tracking-[0.2em] text-cyan-300/80">
-                    Campaign Day {campaignDayProgress}
+                    {campaignBoundary.mode === "intermission"
+                      ? campaignDayProgress
+                      : `Campaign Day ${campaignDayProgress}`}
                   </p>
                 </div>
+
+                {isPhaseThreeActive && (
+                  <div className="flex w-[230px] items-center gap-3 border border-amber-300/60 bg-black/65 p-3 shadow-[0_0_24px_rgba(251,191,36,0.18)]">
+                    <Image
+                      src={commandAssignment.command.patchPath}
+                      alt={`${commandAssignment.command.name} patch`}
+                      width={52}
+                      height={52}
+                      className="h-[52px] w-[52px] object-contain"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.24em] text-amber-300">
+                        Command Authority
+                      </p>
+                      <p className="mt-1 text-xs font-black uppercase text-white">
+                        {commandAssignment.command.name}
+                      </p>
+                      <p className="mt-1 text-[9px] uppercase tracking-[0.12em] text-slate-300">
+                        {commandAssignment.command.battalion.name}
+                      </p>
+                      <p className="mt-1 text-[9px] uppercase tracking-[0.12em] text-amber-100">
+                        {commandAssignment.persisted.role ??
+                          "Battalion Commander"}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 <div className="w-[230px]">
                   <HudPanel title="Mission Objectives">
@@ -254,7 +300,9 @@ export default async function CommandHudPage() {
                           label={label}
                           xp={xp}
                           propertyName={propertyName}
-                          checked={sitrepProperties[propertyName]?.checkbox ?? false}
+                          checked={
+                            sitrepProperties[propertyName]?.checkbox ?? false
+                          }
                         />
                       ))}
                     </div>
@@ -276,16 +324,27 @@ export default async function CommandHudPage() {
                   {designation}
                 </p>
                 <p className="mt-1 text-xs uppercase tracking-[0.25em] text-cyan-400">
-                  Status: Active
+                  Status:{" "}
+                  {campaignBoundary.mode === "intermission"
+                    ? "Standby"
+                    : isPhaseThreeActive
+                      ? "Command Active"
+                      : "Active"}
                 </p>
               </div>
 
-              <EventSystem ceremonialEvent={ceremonialEvent}>
+              <EventSystem
+                ceremonialEvent={ceremonialEvent}
+                campaignBoundary={campaignBoundary}
+              >
                 <HudPanel title="Weekly Operations">
                   <div className="space-y-1">
+                    {classworkEnabled ? (
+                      <HudCheckbox label="SMU Classwork" xp={100} propertyName="SMU Classwork" checked={weeklyProps["SMU Classwork"]?.checkbox ?? false} apiPath="/api/weekly-operations" pageId={weeklyPageId} />
+                    ) : null}
                     <HudCheckbox
                       label={workoutLabel}
-                      xp={200}
+                      xp={workoutXp}
                       propertyName="Workouts"
                       checked={workoutObjectiveComplete}
                       apiPath="/api/weekly-operations"

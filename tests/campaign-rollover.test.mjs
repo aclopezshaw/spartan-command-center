@@ -58,7 +58,46 @@ test("blocks rollover before the incoming phase start date", () => {
   const result = evaluate({ operationalDate: "2026-08-01" });
 
   assert.equal(result.eligible, false);
-  assert.equal(result.transition, null);
+  assert.equal(result.transition?.source.id, phaseOne.id);
+  assert.match(result.reasons[0], /not due until 2026-08-02/i);
+});
+
+test("selects the current campaign transition before a superseded prior run", () => {
+  const currentPhaseTwo = {
+    ...phaseTwo,
+    id: "campaign-2-phase-2",
+    campaignNumber: 2,
+    phaseStatus: "Active",
+    startDate: "2026-09-30",
+  };
+  const currentPhaseThree = {
+    ...phaseTwo,
+    id: "campaign-2-phase-3",
+    campaignNumber: 2,
+    phaseName: "Phase III - Leadership Cadre",
+    phaseNumber: 3,
+    phaseLength: 56,
+    startDate: null,
+    phaseStatus: "Upcoming",
+  };
+  const result = evaluate({
+    phases: [
+      { ...phaseOne, phaseStatus: "Complete" },
+      { ...phaseTwo, phaseStatus: "Superseded" },
+      currentPhaseTwo,
+      currentPhaseThree,
+    ],
+    events: completedEvents.map((event) => ({
+      ...event,
+      phaseId: currentPhaseTwo.id,
+    })),
+    operationalDate: "2026-11-10",
+  });
+
+  assert.equal(result.transition?.source.id, currentPhaseTwo.id);
+  assert.equal(result.transition?.target.id, currentPhaseThree.id);
+  assert.equal(result.eligible, false);
+  assert.match(result.reasons[0], /start date is unset/i);
 });
 
 test("blocks rollover when an outgoing event is unresolved", () => {
@@ -111,10 +150,7 @@ test("reports history-only partial application as recovery", () => {
 
 test("recovers when the outgoing phase was completed before activation", () => {
   const result = evaluate({
-    phases: [
-      { ...phaseOne, phaseStatus: "Complete" },
-      phaseTwo,
-    ],
+    phases: [{ ...phaseOne, phaseStatus: "Complete" }, phaseTwo],
     historyRecordCount: 1,
   });
 
@@ -124,10 +160,7 @@ test("recovers when the outgoing phase was completed before activation", () => {
 
 test("recovers when the incoming phase was activated first", () => {
   const result = evaluate({
-    phases: [
-      phaseOne,
-      { ...phaseTwo, phaseStatus: "Active" },
-    ],
+    phases: [phaseOne, { ...phaseTwo, phaseStatus: "Active" }],
     historyRecordCount: 1,
   });
 
@@ -161,19 +194,19 @@ test("switches the Day 1 HUD to the incoming Phase II daypart suite", () => {
   assert.equal(result.state, "complete");
   assert.equal(
     getHudBackground(activePhaseName, 5),
-    "/images/hud/phase-ii-fireteam-room-morning.png"
+    "/images/hud/phase-ii-fireteam-room-morning.png",
   );
   assert.equal(
     getHudBackground(activePhaseName, 8),
-    "/images/hud/phase-ii-classroom.png"
+    "/images/hud/phase-ii-classroom.png",
   );
   assert.equal(
     getHudBackground(activePhaseName, 11),
-    "/images/hud/phase-ii-mess-hall.png"
+    "/images/hud/phase-ii-mess-hall.png",
   );
   assert.equal(
     getHudBackground(activePhaseName, 22),
-    "/images/hud/phase-ii-fireteam-room-night.png"
+    "/images/hud/phase-ii-fireteam-room-night.png",
   );
 });
 

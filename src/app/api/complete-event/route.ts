@@ -6,6 +6,8 @@ import {
   getEventOutcomeState,
 } from "@/lib/event-outcome";
 import { hasAuthorizedSession } from "@/lib/auth";
+import { PHASE_THREE_EVENT_IDS } from "@/data/events";
+import { reviewBattalionEvent } from "@/lib/battalion-cohesion-store";
 import {
   completeCampaignEvent,
   findCampaignEvent,
@@ -21,6 +23,8 @@ type CompleteEventRequest = {
   eventId?: unknown;
 };
 
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   if (!(await hasAuthorizedSession())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -34,7 +38,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid event completion request" }, { status: 400 });
     }
 
+    if (PHASE_THREE_EVENT_IDS.some(id => id === eventId)) {
+      const result = await reviewBattalionEvent(eventId);
+      return NextResponse.json(result.body, { status: result.status });
+    }
+
     const eventState = await getActiveCampaignEventState();
+    if (/^phase iii(?:\s|[-—–:]|$)/i.test(eventState.phaseName ?? "")) {
+      const result = await reviewBattalionEvent(eventId);
+      return NextResponse.json(result.body, { status: result.status });
+    }
     const campaignDay = eventState.campaignDay;
     const event = eventState.events.find((candidate) => candidate.id === eventId);
     if (!event) {

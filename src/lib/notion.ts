@@ -1,5 +1,11 @@
+import { createDailySitrepResolver, selectDailySitrep } from "./daily-sitrep";
 import "server-only";
+import { PLACEMENT_HISTORY_PREFIX, PLACEMENT_DESCRIPTION_MARKER, parsePlacementDescription, placementSummary, placementTitle, type CompetitionPlacement } from "@/lib/competition-trophies";
+import { buildUnratedCampaignMedal, type UnratedCampaignMedalRecord } from "@/lib/campaign-medals";
+import { parseBattalionAttempt, battalionAttemptSummary } from "@/lib/battalion-cohesion";
+import { BATTALION_RANKINGS_PREFIX } from "@/lib/battalion-rankings";
 
+import { scheduleCommandTrustReconciliation } from "@/lib/command-trust-scheduling";
 import {
   addDaysToDateKey,
   differenceInDateKeys,
@@ -12,6 +18,7 @@ import {
 } from "@/lib/notion-client";
 import { CampaignEvent, ReadinessScores } from "@/data/events";
 import { eventCatalog } from "@/data/events";
+import { filterCampaignEventsByPhase } from "@/lib/events";
 import { applyRetrySchedule } from "@/lib/event-outcome";
 import {
   evaluateRollover,
@@ -32,7 +39,22 @@ import {
   type CampaignMedalRecord,
 } from "@/lib/campaign-medals";
 import {
+  ATHENA_COMMAND,
+  COMMAND_ASSIGNMENT_HISTORY_TITLE,
+  COMMAND_ASSIGNMENT_MAX_STEP,
+  COMMAND_ASSIGNMENT_OPERATION_ID,
+  COMMAND_ASSIGNMENT_VERSION,
+  evaluateCommandAssignment,
+  evaluateCommandAssignmentEligibility,
+  getCanonicalCommandRosterSnapshot,
+  isCanonicalCommandAssignment,
+  type CommandAssignmentEvaluation,
+  type CommandAssignmentPersistenceStatus,
+  type PersistedCommandAssignment,
+} from "@/lib/command-assignment";
+import {
   evaluateIndividualCompletion,
+  getIndividualCompletionProgressionStage,
   toPersistedIndividualCompletionStatus,
   type IndividualCompletionEvaluation,
   type PersistedIndividualCompletionStatus,
@@ -260,6 +282,37 @@ type AlexServiceRecordPage = {
     "Fireteam Assignment Updated At"?: {
       date?: { start?: string | null } | null;
     };
+    "Command Assignment Status"?: {
+      select?: { name?: string } | null;
+    };
+    "Command Assignment Step"?: { number?: number | null };
+    "Command ID"?: { rich_text?: Array<{ plain_text?: string }> };
+    "Command Name"?: { rich_text?: Array<{ plain_text?: string }> };
+    "Command Motto"?: { rich_text?: Array<{ plain_text?: string }> };
+    "Command Battalion ID"?: {
+      rich_text?: Array<{ plain_text?: string }>;
+    };
+    "Command Battalion Name"?: {
+      rich_text?: Array<{ plain_text?: string }>;
+    };
+    "Command Role"?: { rich_text?: Array<{ plain_text?: string }> };
+    "Command Insignia ID"?: {
+      rich_text?: Array<{ plain_text?: string }>;
+    };
+    "Command Assigned At"?: { date?: { start?: string | null } | null };
+    "Command Assignment Version"?: { number?: number | null };
+    "Command Assignment Operation ID"?: {
+      rich_text?: Array<{ plain_text?: string }>;
+    };
+    "Command Roster Snapshot"?: {
+      rich_text?: Array<{ plain_text?: string }>;
+    };
+    "Command Assignment Updated At"?: {
+      date?: { start?: string | null } | null;
+    };
+    "Command Trust Unlocked At"?: {
+      date?: { start?: string | null } | null;
+    };
   };
 };
 
@@ -320,6 +373,12 @@ export type FireteamAssignmentStatus = FireteamAssignmentEvaluation & {
   operationalDate: string;
   eligibility: IndividualCompletionStatus;
   fireteam: typeof FIRETEAM_EPSILON;
+};
+
+export type CommandAssignmentStatus = CommandAssignmentEvaluation & {
+  operationalDate: string;
+  eligibility: ReturnType<typeof evaluateCommandAssignmentEligibility>;
+  command: typeof ATHENA_COMMAND;
 };
 
 export type UnitCohesionStatus = {
@@ -411,6 +470,7 @@ export async function getServiceHistoryRecords(): Promise<ServiceHistoryRecord[]
             does_not_contain: FIRETEAM_STANDINGS_TITLE_PREFIX,
           },
         },
+        { property: "Title", title: { does_not_contain: BATTALION_RANKINGS_PREFIX } },
       ],
     },
   });
@@ -421,9 +481,14 @@ export async function getServiceHistoryRecords(): Promise<ServiceHistoryRecord[]
         properties["Readiness Category"]?.select?.name ?? "None";
       const storedReadinessDelta =
         properties["Readiness Delta"]?.number;
+      const rawDescription = getTextProperty(properties, "Description");
+      const placement = parsePlacementDescription(rawDescription);
+      const cohesion = parseBattalionAttempt(rawDescription);
       return {
         id: page.id,
-        title: getTextProperty(properties, "Title"),
+        title: placement
+          ? `Phase ${placement.phaseNumber === 2 ? "II Fireteam" : "III Battalion"} — ${placement.rank}${placement.rank === 1 ? "st" : placement.rank === 2 ? "nd" : placement.rank === 3 ? "rd" : "th"} Place`
+          : cohesion ? `Battalion Cohesion — ${cohesion.eventTitle} · Attempt ${cohesion.attempt}` : getTextProperty(properties, "Title"),
         date: properties.Date?.date?.start ?? null,
         entryType:
           properties["Entry Type"]?.select?.name ?? "Record",
@@ -446,7 +511,7 @@ export async function getServiceHistoryRecords(): Promise<ServiceHistoryRecord[]
           properties["Readiness Source Type"]?.select?.name ?? null,
         readinessSourceId:
           getTextProperty(properties, "Readiness Source ID") || null,
-        description: getTextProperty(properties, "Description"),
+        description: placement ? rawDescription.split(PLACEMENT_DESCRIPTION_MARKER)[0] : cohesion ? battalionAttemptSummary(cohesion) : rawDescription,
       };
     })
     .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
@@ -672,9 +737,10 @@ export async function getActiveCampaignEventState(): Promise<CampaignEventState>
       "Gold"
     ),
     events: applyRetrySchedule(
-      events
-        .map(toCampaignEvent)
-        .filter((event) => event.phaseId === activePhase.id)
+      filterCampaignEventsByPhase(
+        events.map(toCampaignEvent),
+        activePhase.id
+      )
     ),
   };
 }
@@ -1041,6 +1107,39 @@ function getFrozenPhaseXpSnapshot(
     finalizedAt,
     version,
   };
+}
+
+/** Reads canonical permanent competition-placement history for earned trophies. */
+export async function getCompetitionPlacements(): Promise<CompetitionPlacement[]> {
+  const serviceId = await getAlexServiceRecordPageId();
+  if (!serviceId) return [];
+  const pages = await queryAllDataSourcePages({ dataSourceId: await getServiceHistoryDataSourceId(), filter: { and: [
+    { property: "Title", title: { starts_with: PLACEMENT_HISTORY_PREFIX } },
+    { property: "Related Service Record", relation: { contains: serviceId } },
+    { property: "Entry Type", select: { equals: "System" } },
+  ] } });
+  const seen = new Set<string>();
+  const placements: CompetitionPlacement[] = [];
+  for (const page of pages) {
+    const properties = (page as { properties: Record<string, { rich_text?: { plain_text: string }[]; title?: { plain_text: string }[]; number?: number; relation?: { id: string }[] }> }).properties;
+    const description = getTextProperty(properties, "Description");
+    const record = parsePlacementDescription(description);
+    if (!record || getTextProperty(properties, "Title") !== placementTitle(record) || properties["XP Awarded"]?.number !== 0 || !properties["Related Campaign"]?.relation?.some(r => r.id === record.phaseId) || description !== placementSummary(record) + PLACEMENT_DESCRIPTION_MARKER + JSON.stringify(record) || seen.has(record.phaseId)) throw new Error("Invalid or duplicate final competition placement");
+    seen.add(record.phaseId);
+    placements.push(record);
+  }
+  return placements.sort((a, b) => b.recordDate.localeCompare(a.recordDate) || b.phaseNumber - a.phaseNumber);
+}
+
+/** Returns unawarded medal placeholders, retaining live XP until finalization. */
+export async function getUnratedCampaignMedals(
+  live: { phaseId: string | null; earnedXp: number; earnedMedal: CampaignMedal } | null
+): Promise<UnratedCampaignMedalRecord[]> {
+  const { phasePages } = await getCampaignRolloverRecords();
+  return phasePages.flatMap(page => {
+    const record = buildUnratedCampaignMedal({ phase: toRolloverPhase(page), today: getOperationalDateKey(), snapshot: getFrozenPhaseXpSnapshot(page), live });
+    return record ? [record] : [];
+  }).sort((a, b) => b.recordDate.localeCompare(a.recordDate));
 }
 
 /** Returns earned, frozen campaign medals for the Service Record rail. */
@@ -2296,11 +2395,13 @@ export async function getPersonnelShellState() {
   if (!serviceRecord) {
     return {
       fireteamUnlocked: false,
+      commandUnlocked: false,
       currentRank: "Recruit",
     };
   }
 
-  const persisted = getPersistedFireteamAssignment(serviceRecord);
+  const persistedFireteam = getPersistedFireteamAssignment(serviceRecord);
+  const persistedCommand = getPersistedCommandAssignment(serviceRecord);
   const currentRankRelations =
     serviceRecord.properties["Current Rank"]?.relation ?? [];
   const currentRankPage =
@@ -2315,8 +2416,11 @@ export async function getPersonnelShellState() {
 
   return {
     fireteamUnlocked:
-      persisted.status === "Complete" &&
-      persisted.fireteamId === FIRETEAM_EPSILON.id,
+      persistedFireteam.status === "Complete" &&
+      persistedFireteam.fireteamId === FIRETEAM_EPSILON.id,
+    commandUnlocked:
+      persistedCommand.status === "Complete" &&
+      isCanonicalCommandAssignment(persistedCommand),
     currentRank: currentRank?.name ?? "Recruit",
   };
 }
@@ -2978,11 +3082,10 @@ async function persistIndividualCompletionEligibilityInternal(
         status.evidence.snapshotFinalizedAt ??
         operationalDate
       : existingCompletedAt;
-  const progressionStage =
-    status.state === "assigned"
-      ? "Fireteam Member"
-      : serviceRecord.properties["Progression Stage"]?.select?.name ??
-        "Individual";
+  const progressionStage = getIndividualCompletionProgressionStage(
+    status.state,
+    serviceRecord.properties["Progression Stage"]?.select?.name ?? null,
+  );
 
   await getNotionClient().pages.update({
     page_id: serviceRecord.id,
@@ -3164,6 +3267,163 @@ export async function getFireteamAssignmentStatus(
   };
 }
 
+function getPersistedCommandAssignment(
+  serviceRecord: AlexServiceRecordPage
+): PersistedCommandAssignment {
+  const properties = serviceRecord.properties;
+  const rawStatus =
+    properties["Command Assignment Status"]?.select?.name ?? null;
+  const validStatuses: Array<
+    Exclude<CommandAssignmentPersistenceStatus, null>
+  > = ["Pending", "In Progress", "Finalizing", "Complete"];
+  const status = validStatuses.includes(
+    rawStatus as Exclude<CommandAssignmentPersistenceStatus, null>
+  )
+    ? (rawStatus as Exclude<CommandAssignmentPersistenceStatus, null>)
+    : null;
+
+  return {
+    status,
+    step: Math.max(
+      0,
+      Math.min(
+        COMMAND_ASSIGNMENT_MAX_STEP,
+        Math.floor(properties["Command Assignment Step"]?.number ?? 0)
+      )
+    ),
+    commandId: getRichTextValue(properties["Command ID"]),
+    commandName: getRichTextValue(properties["Command Name"]),
+    motto: getRichTextValue(properties["Command Motto"]),
+    battalionId: getRichTextValue(properties["Command Battalion ID"]),
+    battalionName: getRichTextValue(
+      properties["Command Battalion Name"]
+    ),
+    role: getRichTextValue(properties["Command Role"]),
+    insigniaId: getRichTextValue(properties["Command Insignia ID"]),
+    assignedAt: properties["Command Assigned At"]?.date?.start ?? null,
+    version: properties["Command Assignment Version"]?.number ?? null,
+    operationId: getRichTextValue(
+      properties["Command Assignment Operation ID"]
+    ),
+    rosterSnapshot: getRichTextValue(
+      properties["Command Roster Snapshot"]
+    ),
+    updatedAt:
+      properties["Command Assignment Updated At"]?.date?.start ?? null,
+    progressionStage:
+      properties["Progression Stage"]?.select?.name ?? null,
+    commandTrustUnlockedAt:
+      properties["Command Trust Unlocked At"]?.date?.start ?? null,
+  };
+}
+
+async function getCommandAssignmentHistoryCount({
+  serviceRecordPageId,
+  sourcePhaseId,
+}: {
+  serviceRecordPageId: string;
+  sourcePhaseId: string;
+}) {
+  const results = await queryAllDataSourcePages({
+    dataSourceId: await getServiceHistoryDataSourceId(),
+    filter: {
+      and: [
+        {
+          property: "Title",
+          title: { equals: COMMAND_ASSIGNMENT_HISTORY_TITLE },
+        },
+        {
+          property: "Entry Type",
+          select: { equals: "Assignment" },
+        },
+        {
+          property: "Related Service Record",
+          relation: { contains: serviceRecordPageId },
+        },
+        {
+          property: "Related Campaign",
+          relation: { contains: sourcePhaseId },
+        },
+      ],
+    },
+  });
+
+  return results.length;
+}
+
+export async function getCommandAssignmentStatus(
+  operationalDate = getOperationalDateKey()
+): Promise<CommandAssignmentStatus> {
+  const [{ phases, events }, fireteamAssignment, serviceRecord] =
+    await Promise.all([
+      getCampaignRolloverRecords(),
+      getFireteamAssignmentStatus(operationalDate),
+      findAlexServiceRecord() as Promise<AlexServiceRecordPage | null>,
+    ]);
+
+  if (!serviceRecord) {
+    throw new Error("Service Record not found for ALEX-225");
+  }
+
+  const sourcePhase = phases.find(
+    (phase) => phase.campaignNumber === 2 && phase.phaseNumber === 2
+  );
+  const targetPhase = phases.find(
+    (phase) => phase.campaignNumber === 2 && phase.phaseNumber === 3
+  );
+  const sourceEvents = sourcePhase
+    ? events.filter(
+        (event) =>
+          event.properties.Campaign?.relation?.some(
+            ({ id }) => id === sourcePhase.id
+          ) ?? false
+      )
+    : [];
+  const sourceEventCompletion = await Promise.all(
+    sourceEvents.map(async (event) =>
+      event.properties.Status?.select?.name === "Defeated" ||
+      Boolean(event.properties["Date Completed"]?.date?.start) ||
+      (await hasServiceHistoryForEvent(event.id))
+    )
+  );
+  const sourcePhaseBoundaryReached = Boolean(
+    sourcePhase?.startDate &&
+      sourcePhase.phaseLength > 0 &&
+      differenceInDateKeys(sourcePhase.startDate, operationalDate) + 1 >=
+        sourcePhase.phaseLength
+  );
+  const eligibility = evaluateCommandAssignmentEligibility({
+    fireteamAssignmentComplete: fireteamAssignment.state === "completed",
+    sourcePhaseId: sourcePhase?.id ?? null,
+    sourcePhaseNumber: sourcePhase?.phaseNumber ?? null,
+    sourcePhaseLength: sourcePhase?.phaseLength ?? null,
+    sourcePhaseBoundaryReached,
+    sourcePhaseEventsComplete:
+      sourceEvents.length > 0 && sourceEventCompletion.every(Boolean),
+    targetPhaseId: targetPhase?.id ?? null,
+    targetPhaseNumber: targetPhase?.phaseNumber ?? null,
+    targetPhaseStatus: targetPhase?.phaseStatus ?? null,
+  });
+  const persisted = getPersistedCommandAssignment(serviceRecord);
+  const historyCount = sourcePhase
+    ? await getCommandAssignmentHistoryCount({
+        serviceRecordPageId: serviceRecord.id,
+        sourcePhaseId: sourcePhase.id,
+      })
+    : 0;
+
+  return {
+    ...evaluateCommandAssignment({
+      eligibilityState: eligibility.state,
+      persisted,
+      historyCount,
+    }),
+    operationalDate,
+    eligibility,
+    command: ATHENA_COMMAND,
+  };
+}
+
 export class FireteamAssignmentNotAvailableError extends Error {
   status: FireteamAssignmentStatus;
 
@@ -3174,6 +3434,21 @@ export class FireteamAssignmentNotAvailableError extends Error {
         "Fireteam Assignment is not available."
     );
     this.name = "FireteamAssignmentNotAvailableError";
+    this.status = status;
+  }
+}
+
+export class CommandAssignmentNotAvailableError extends Error {
+  status: CommandAssignmentStatus;
+
+  constructor(status: CommandAssignmentStatus, message?: string) {
+    super(
+      message ||
+        status.reasons.join(" ") ||
+        status.eligibility.reasons.join(" ") ||
+        "Command Assignment is not available."
+    );
+    this.name = "CommandAssignmentNotAvailableError";
     this.status = status;
   }
 }
@@ -3597,6 +3872,346 @@ export function completeFireteamAssignment(
   return activeFireteamAssignment;
 }
 
+export async function beginCommandAssignmentCeremony(
+  operationalDate = getOperationalDateKey()
+) {
+  const status = await getCommandAssignmentStatus(operationalDate);
+
+  if (
+    status.state === "in_progress" ||
+    status.state === "finalizing" ||
+    status.state === "completed"
+  ) {
+    return status;
+  }
+
+  if (!status.canBegin || status.eligibility.state !== "eligible") {
+    throw new CommandAssignmentNotAvailableError(status);
+  }
+
+  const serviceRecord = (await findAlexServiceRecord()) as
+    | AlexServiceRecordPage
+    | null;
+
+  if (!serviceRecord) {
+    throw new Error("Service Record not found for ALEX-225");
+  }
+
+  await getNotionClient().pages.update({
+    page_id: serviceRecord.id,
+    properties: {
+      "Command Assignment Status": {
+        select: { name: "In Progress" },
+      },
+      "Command Assignment Step": { number: status.persisted.step },
+      "Command Assignment Updated At": {
+        date: { start: operationalDate },
+      },
+    },
+  });
+
+  const verified = await getCommandAssignmentStatus(operationalDate);
+
+  if (verified.state !== "in_progress") {
+    throw new Error("Command Assignment ceremony did not enter progress");
+  }
+
+  return verified;
+}
+
+export async function advanceCommandAssignmentCeremony(
+  step: number,
+  operationalDate = getOperationalDateKey()
+) {
+  const serviceRecord = (await findAlexServiceRecord()) as
+    | AlexServiceRecordPage
+    | null;
+
+  if (!serviceRecord) {
+    throw new Error("Service Record not found for ALEX-225");
+  }
+
+  const persisted = getPersistedCommandAssignment(serviceRecord);
+
+  if (
+    persisted.status === "Finalizing" ||
+    persisted.status === "Complete"
+  ) {
+    return { state: persisted.status, persisted };
+  }
+
+  if (persisted.status !== "In Progress") {
+    throw new Error("Command Assignment ceremony is not in progress");
+  }
+
+  if (
+    !Number.isInteger(step) ||
+    step < persisted.step ||
+    step >
+      Math.min(
+        COMMAND_ASSIGNMENT_MAX_STEP,
+        persisted.step + 1
+      )
+  ) {
+    throw new Error("Invalid Command Assignment ceremony step");
+  }
+
+  await getNotionClient().pages.update({
+    page_id: serviceRecord.id,
+    properties: {
+      "Command Assignment Step": { number: step },
+      "Command Assignment Updated At": {
+        date: { start: operationalDate },
+      },
+    },
+  });
+
+  const verifiedRecord = (await getNotionClient().pages.retrieve({
+    page_id: serviceRecord.id,
+  })) as unknown as AlexServiceRecordPage;
+  const verified = getPersistedCommandAssignment(verifiedRecord);
+
+  if (
+    verified.status !== "In Progress" ||
+    verified.step !== step
+  ) {
+    throw new Error("Command Assignment ceremony step did not verify");
+  }
+
+  return { state: "In Progress", persisted: verified };
+}
+
+async function ensureCommandAssignmentHistory(
+  serviceRecord: AlexServiceRecordPage,
+  status: CommandAssignmentStatus,
+  assignedAt: string
+) {
+  const sourcePhaseId = status.eligibility.evidence.sourcePhaseId;
+
+  if (!sourcePhaseId) {
+    throw new Error("Phase II source record is unavailable");
+  }
+
+  const existingCount = await getCommandAssignmentHistoryCount({
+    serviceRecordPageId: serviceRecord.id,
+    sourcePhaseId,
+  });
+
+  if (existingCount > 1) {
+    throw new Error(
+      "Multiple Command Assignment history records require manual reconciliation"
+    );
+  }
+
+  if (existingCount === 1) {
+    return;
+  }
+
+  await getNotionClient().pages.create({
+    parent: {
+      database_id: getRequiredNotionId("SERVICE_HISTORY_DATABASE_ID"),
+    },
+    properties: {
+      Title: {
+        title: [
+          { text: { content: COMMAND_ASSIGNMENT_HISTORY_TITLE } },
+        ],
+      },
+      Date: { date: { start: assignedAt } },
+      "Campaign Day": {
+        number: status.eligibility.evidence.sourcePhaseLength,
+      },
+      "Entry Type": { select: { name: "Assignment" } },
+      "XP Awarded": { number: 0 },
+      "Readiness Category": { select: { name: "None" } },
+      Description: {
+        rich_text: [
+          {
+            text: {
+              content:
+                "ALEX-225 received command of Athena Training Battalion as Battalion Commander. Michael, Paige, Ellie, and Zoe received command of Alpha, Bravo, Charlie, and Delta Companies. WISDOM UNDER FIRE.",
+            },
+          },
+        ],
+      },
+      "Related Campaign": { relation: [{ id: sourcePhaseId }] },
+      "Related Service Record": {
+        relation: [{ id: serviceRecord.id }],
+      },
+    },
+  });
+}
+
+let activeCommandAssignment: Promise<CommandAssignmentStatus> | null = null;
+
+async function completeCommandAssignmentInternal(
+  operationalDate: string
+) {
+  let status = await getCommandAssignmentStatus(operationalDate);
+
+  if (status.state === "completed") {
+    return status;
+  }
+
+  if (status.state === "conflict" || status.state === "locked") {
+    throw new CommandAssignmentNotAvailableError(status);
+  }
+
+  if (status.state === "available") {
+    throw new CommandAssignmentNotAvailableError(
+      status,
+      "Begin the Command Assignment ceremony before accepting command."
+    );
+  }
+
+  if (
+    status.state === "in_progress" &&
+    status.persisted.step < COMMAND_ASSIGNMENT_MAX_STEP
+  ) {
+    throw new CommandAssignmentNotAvailableError(
+      status,
+      "Complete every ceremony presentation before accepting command."
+    );
+  }
+
+  const serviceRecord = (await findAlexServiceRecord()) as
+    | AlexServiceRecordPage
+    | null;
+
+  if (!serviceRecord) {
+    throw new Error("Service Record not found for ALEX-225");
+  }
+
+  const assignedAt = status.persisted.assignedAt ?? operationalDate;
+
+  if (!isCanonicalCommandAssignment(status.persisted)) {
+    await getNotionClient().pages.update({
+      page_id: serviceRecord.id,
+      properties: {
+        "Progression Stage": { select: { name: "Command School" } },
+        "Command Assignment Status": {
+          select: { name: "Finalizing" },
+        },
+        "Command Assignment Step": {
+          number: COMMAND_ASSIGNMENT_MAX_STEP,
+        },
+        "Command ID": {
+          rich_text: [{ text: { content: ATHENA_COMMAND.id } }],
+        },
+        "Command Name": {
+          rich_text: [{ text: { content: ATHENA_COMMAND.name } }],
+        },
+        "Command Motto": {
+          rich_text: [{ text: { content: ATHENA_COMMAND.motto } }],
+        },
+        "Command Battalion ID": {
+          rich_text: [
+            { text: { content: ATHENA_COMMAND.battalion.id } },
+          ],
+        },
+        "Command Battalion Name": {
+          rich_text: [
+            { text: { content: ATHENA_COMMAND.battalion.name } },
+          ],
+        },
+        "Command Role": {
+          rich_text: [{ text: { content: "Battalion Commander" } }],
+        },
+        "Command Insignia ID": {
+          rich_text: [{ text: { content: ATHENA_COMMAND.insigniaId } }],
+        },
+        "Command Assigned At": { date: { start: assignedAt } },
+        "Command Assignment Version": {
+          number: COMMAND_ASSIGNMENT_VERSION,
+        },
+        "Command Assignment Operation ID": {
+          rich_text: [
+            { text: { content: COMMAND_ASSIGNMENT_OPERATION_ID } },
+          ],
+        },
+        "Command Roster Snapshot": {
+          rich_text: [
+            {
+              text: {
+                content: getCanonicalCommandRosterSnapshot(assignedAt),
+              },
+            },
+          ],
+        },
+        "Command Assignment Updated At": {
+          date: { start: operationalDate },
+        },
+      },
+    });
+
+    status = await getCommandAssignmentStatus(operationalDate);
+
+    if (status.state !== "finalizing") {
+      throw new Error("Canonical Command Assignment snapshot did not verify");
+    }
+  }
+
+  await ensureCommandAssignmentHistory(serviceRecord, status, assignedAt);
+
+  const sourcePhaseId = status.eligibility.evidence.sourcePhaseId;
+
+  if (!sourcePhaseId) {
+    throw new Error("Phase II source record is unavailable");
+  }
+
+  const historyCount = await getCommandAssignmentHistoryCount({
+    serviceRecordPageId: serviceRecord.id,
+    sourcePhaseId,
+  });
+
+  if (historyCount !== 1) {
+    throw new Error(
+      "Command Assignment history did not reconcile to exactly one record"
+    );
+  }
+
+  await getNotionClient().pages.update({
+    page_id: serviceRecord.id,
+    properties: {
+      "Command Assignment Status": { select: { name: "Complete" } },
+      "Command Assignment Step": {
+        number: COMMAND_ASSIGNMENT_MAX_STEP,
+      },
+      "Command Trust Unlocked At": {
+        date: {
+          start:
+            status.persisted.commandTrustUnlockedAt ?? operationalDate,
+        },
+      },
+      "Command Assignment Updated At": {
+        date: { start: operationalDate },
+      },
+    },
+  });
+
+  const verified = await getCommandAssignmentStatus(operationalDate);
+
+  if (verified.state !== "completed") {
+    throw new Error("Command Assignment completion did not verify");
+  }
+
+  return verified;
+}
+
+export function completeCommandAssignment(
+  operationalDate = getOperationalDateKey()
+) {
+  if (!activeCommandAssignment) {
+    activeCommandAssignment = completeCommandAssignmentInternal(
+      operationalDate
+    ).finally(() => {
+      activeCommandAssignment = null;
+    });
+  }
+
+  return activeCommandAssignment;
+}
+
 type UnitCohesionLedgerPage = {
   id: string;
   properties?: Record<
@@ -3909,72 +4524,40 @@ export async function reconcileUnitCohesionHabit(
   return getUnitCohesionStatus();
 }
 
-export async function findTodaySitrep(dateKey = getOperationalDateKey()) {
-  const notion = getNotionClient();
-  const dataSourceId = getRequiredNotionId(
-    "DAILY_SITREP_DATA_SOURCE_ID"
-  );
-
-  const response = await notion.dataSources.query({
-    data_source_id: dataSourceId,
-    filter: {
-      property: "Mission Date",
-      date: {
-        equals: dateKey,
-      },
-    },
-    page_size: 1,
+export async function findTodaySitrep(
+  dateKey = getOperationalDateKey(),
+  serviceRecordId?: string
+) {
+  const ownerId = serviceRecordId ?? await getAlexServiceRecordPageId();
+  if (!ownerId) throw new Error("Service Record not found for ALEX-225");
+  const response = await queryAllDataSourcePages({
+    dataSourceId: getRequiredNotionId("DAILY_SITREP_DATA_SOURCE_ID"),
+    filter: { and: [
+      { property: "Mission Date", date: { equals: dateKey } },
+      { property: "Spartan", relation: { contains: ownerId } },
+    ] },
   });
-
-  return response.results[0] ?? null;
+  return selectDailySitrep(response as Array<{ id: string }>);
 }
 
-export async function getTodaySitrep() {
-  const notion = getNotionClient();
-  const dataSourceId = getRequiredNotionId(
-    "DAILY_SITREP_DATA_SOURCE_ID"
-  );
-  const today = getOperationalDateKey();
-  const existing = await findTodaySitrep(today);
-
-  if (existing) {
-    return existing;
-  }
-
-  const spartan = await getAlexServiceRecord();
-
-  if (!spartan) {
-    throw new Error("Service Record not found for ALEX-225");
-  }
-
-  return notion.pages.create({
-    parent: {
-      data_source_id: dataSourceId,
-    },
+const resolveDailySitrep = createDailySitrepResolver({
+  find: ({ date, serviceRecordId }) => findTodaySitrep(date, serviceRecordId),
+  create: ({ date, serviceRecordId }) => getNotionClient().pages.create({
+    parent: { data_source_id: getRequiredNotionId("DAILY_SITREP_DATA_SOURCE_ID") },
     properties: {
-      "Daily Log": {
-        title: [
-          {
-            text: {
-              content: today,
-            },
-          },
-        ],
-      },
-      "Mission Date": {
-        date: {
-          start: today,
-        },
-      },
-      Spartan: {
-        relation: [
-          {
-            id: spartan.id,
-          },
-        ],
-      },
+      "Daily Log": { title: [{ text: { content: date } }] },
+      "Mission Date": { date: { start: date } },
+      Spartan: { relation: [{ id: serviceRecordId }] },
     },
-  } as never);
+  }),
+});
+
+export async function getTodaySitrep() {
+  // Capture the operational date before awaiting identity resolution or sharing a task.
+  const date = getOperationalDateKey();
+  const serviceRecordId = await getAlexServiceRecordPageId();
+  if (!serviceRecordId) throw new Error("Service Record not found for ALEX-225");
+  return resolveDailySitrep({ date, serviceRecordId });
 }
 
 export async function getHydrationTotalForOperationalDay(date = new Date()) {
@@ -4279,6 +4862,8 @@ export async function updateDailySitrepCheckbox(
     checked,
   });
 
+  scheduleCommandTrustReconciliation();
+
   return updated;
 }
 
@@ -4443,6 +5028,8 @@ export async function updateWeeklyOperationCheckbox(
     sourceDate,
     checked,
   });
+
+  scheduleCommandTrustReconciliation();
 
   return updated;
 }

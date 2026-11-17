@@ -109,3 +109,10 @@ export function constantTimeEqual(
 
   return timingSafeEqual(suppliedDigest, expectedDigest);
 }
+
+export function getBearerToken(authorization: string | null) {
+  if (!authorization) return null;
+
+  const match = /^Bearer ([^\s]+)$/.exec(authorization);
+  return match?.[1] ?? null;
+}

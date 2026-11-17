@@ -3,6 +3,7 @@ import Link from "next/link";
 import NavBar from "../../components/NavBar";
 import PageHeader from "../../components/PageHeader";
 import FireteamAssignmentCeremony from "../../components/FireteamAssignmentCeremony";
+import CommandAssignmentCeremony from "../../components/CommandAssignmentCeremony";
 import CampaignRolloverControl from "../../components/CampaignRolloverControl";
 import PromotionControl from "../../components/PromotionControl";
 import { getAssemblyHallPresentation } from "@/lib/ceremonial-events";
@@ -10,6 +11,7 @@ import {
   getActiveCampaignEventState,
   getCampaignPhaseXpSummary,
   getCampaignRolloverStatus,
+  getCommandAssignmentStatus,
   getFireteamAssignmentStatus,
   getPromotionStatus,
   type FireteamAssignmentStatus,
@@ -170,15 +172,20 @@ function FireteamCeremonyPreview({
 export default async function AssemblyHallPage({
   searchParams,
 }: {
-  searchParams: Promise<{ preview?: string | string[] }>;
+  searchParams: Promise<{
+    preview?: string | string[];
+    replay?: string | string[];
+  }>;
 }) {
-  const requestedPreview = (await searchParams).preview;
+  const { preview: requestedPreview, replay: requestedReplay } =
+    await searchParams;
   const isFireteamCeremonyPreview =
     process.env.NODE_ENV !== "production" &&
     requestedPreview === "fireteam-assignment";
-  const [assignment, rollover, promotion, phaseXpSummary] =
+  const [assignment, commandAssignment, rollover, promotion, phaseXpSummary] =
     await Promise.all([
       getFireteamAssignmentStatus(),
+      getCommandAssignmentStatus(),
       getCampaignRolloverStatus(),
       getPromotionStatus(),
       getActiveCampaignEventState().then((eventState) =>
@@ -217,8 +224,30 @@ export default async function AssemblyHallPage({
     promotion.state === "finalizing" ||
     (promotion.state === "conflict" &&
       promotion.pendingTransition !== null);
+  const isCommandOrderActive = [
+    "available",
+    "in_progress",
+    "finalizing",
+    "conflict",
+  ].includes(commandAssignment.state);
+  const isCommandCeremonyReplay =
+    requestedReplay === "command-assignment" &&
+    commandAssignment.state === "completed" &&
+    !isAssignmentOrderActive &&
+    !isCommandOrderActive &&
+    !isPromotionOrderActive;
   const isOrderActive =
-    isAssignmentOrderActive || isPromotionOrderActive;
+    isAssignmentOrderActive ||
+    isCommandOrderActive ||
+    isPromotionOrderActive ||
+    isCommandCeremonyReplay;
+  const hasRecordedCeremony =
+    commandAssignment.state === "completed" ||
+    assignment.state === "completed";
+  const recordedCeremonyCount = [
+    assignment.state,
+    commandAssignment.state,
+  ].filter((state) => state === "completed").length;
   const presentation = isFireteamCeremonyPreview
     ? {
         eyebrow: "Ceremony In Progress",
@@ -226,6 +255,36 @@ export default async function AssemblyHallPage({
         summary:
           "Personnel Command has finalized Phase II unit assignments. Formal proceedings are now in session.",
         statusLabel: "Ceremony Active",
+      }
+    : isCommandCeremonyReplay
+      ? {
+          eyebrow: "Ceremony Archive Replay",
+          title: "Athena Training Battalion",
+          summary:
+            "Personnel Command has reopened the completed Athena Command ceremony for read-only review. No assignment, reward, or campaign state can change during replay.",
+          statusLabel: "Ceremony Replay",
+        }
+    : isCommandOrderActive
+    ? {
+        eyebrow:
+          commandAssignment.state === "finalizing"
+            ? "Command Record Recovery"
+            : commandAssignment.state === "conflict"
+              ? "Command Record Conflict"
+              : "Command Orders Received",
+        title: "Athena Training Battalion",
+        summary:
+          commandAssignment.state === "finalizing"
+            ? "The command transition requires final record reconciliation before Personnel Command can clear these orders."
+            : commandAssignment.state === "conflict"
+              ? "Command evidence requires manual review before the assignment can continue."
+              : "Phase II is complete. ALEX-225 is authorized to accept command of Athena Training Battalion without activating Phase III.",
+        statusLabel:
+          commandAssignment.state === "finalizing"
+            ? "Recovery Required"
+            : commandAssignment.state === "conflict"
+              ? "Review Required"
+              : "Command Authorized",
       }
     : isPromotionOrderActive
     ? {
@@ -253,7 +312,11 @@ export default async function AssemblyHallPage({
               : "Promotion Authorized",
       }
     : assignmentPresentation;
-  const currentOrder = isPromotionOrderActive
+  const currentOrder = isCommandCeremonyReplay
+    ? "Command Assignment Replay"
+    : isCommandOrderActive
+    ? "Command Assignment"
+    : isPromotionOrderActive
     ? `${promotionOrderRank} Promotion`
     : isAssignmentOrderActive
       ? "Fireteam Assignment"
@@ -309,7 +372,7 @@ export default async function AssemblyHallPage({
                     isOrderActive ? "text-amber-200" : "text-slate-200"
                   }`}
                 >
-                  {presentation.statusLabel}
+                  {isOrderActive ? presentation.statusLabel : "Standing By"}
                 </p>
               </div>
 
@@ -322,7 +385,8 @@ export default async function AssemblyHallPage({
                 </p>
               </div>
 
-              <div className="relative z-10 flex min-h-[620px] items-end justify-center px-4 pb-6 pt-28 lg:min-h-[720px] lg:px-8 lg:pb-8">
+              {isOrderActive ? (
+                <div className="relative z-10 flex min-h-[620px] items-end justify-center px-4 pb-6 pt-28 lg:min-h-[720px] lg:px-8 lg:pb-8">
                 <div className="w-full max-w-5xl border border-cyan-700/50 bg-black/80 p-5 shadow-[0_0_40px_rgba(0,0,0,0.75)] backdrop-blur-md sm:p-7">
                   <div className="grid gap-6 lg:grid-cols-[1.45fr_0.8fr]">
                     <div>
@@ -340,7 +404,12 @@ export default async function AssemblyHallPage({
                         {presentation.summary}
                       </p>
 
-                      {isPromotionOrderActive ? (
+                      {isCommandOrderActive || isCommandCeremonyReplay ? (
+                        <CommandAssignmentCeremony
+                          initialStatus={commandAssignment}
+                          initialReplay={isCommandCeremonyReplay}
+                        />
+                      ) : isPromotionOrderActive ? (
                         <PromotionControl initialStatus={promotion} />
                       ) : (
                         <FireteamAssignmentCeremony
@@ -350,7 +419,60 @@ export default async function AssemblyHallPage({
                       )}
 
                       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                        {isPromotionOrderActive ? (
+                        {isCommandOrderActive || isCommandCeremonyReplay ? (
+                          <>
+                            <EvidenceItem
+                              label="Fireteam Assignment"
+                              value={
+                                commandAssignment.eligibility.evidence
+                                  .fireteamAssignmentComplete
+                                  ? "Verified"
+                                  : "Pending"
+                              }
+                              complete={
+                                commandAssignment.eligibility.evidence
+                                  .fireteamAssignmentComplete
+                              }
+                            />
+                            <EvidenceItem
+                              label="Phase II Boundary"
+                              value={
+                                commandAssignment.eligibility.evidence
+                                  .sourcePhaseBoundaryReached
+                                  ? "Verified"
+                                  : "Pending"
+                              }
+                              complete={
+                                commandAssignment.eligibility.evidence
+                                  .sourcePhaseBoundaryReached
+                              }
+                            />
+                            <EvidenceItem
+                              label="Phase II Events"
+                              value={
+                                commandAssignment.eligibility.evidence
+                                  .sourcePhaseEventsComplete
+                                  ? "Complete"
+                                  : "Review Required"
+                              }
+                              complete={
+                                commandAssignment.eligibility.evidence
+                                  .sourcePhaseEventsComplete
+                              }
+                            />
+                            <EvidenceItem
+                              label="Phase III"
+                              value={
+                                commandAssignment.eligibility.evidence
+                                  .targetPhaseStatus ?? "Unavailable"
+                              }
+                              complete={
+                                commandAssignment.eligibility.evidence
+                                  .targetPhaseStatus === "Upcoming"
+                              }
+                            />
+                          </>
+                        ) : isPromotionOrderActive ? (
                           <>
                             <EvidenceItem
                               label="Awarded Rank"
@@ -494,13 +616,53 @@ export default async function AssemblyHallPage({
                     </aside>
                   </div>
                 </div>
-              </div>
+                </div>
+              ) : null}
 
               <div className="pointer-events-none absolute inset-4 border border-cyan-400/15" />
               <div className="pointer-events-none absolute inset-0 shadow-[inset_0_0_90px_rgba(8,145,178,0.22)]" />
             </div>
             </div>
           )}
+
+          {!isOrderActive && hasRecordedCeremony ? (
+            <div className="mt-5 border border-cyan-800/70 bg-[linear-gradient(135deg,rgba(2,6,23,0.96),rgba(0,0,0,0.92))] p-5 shadow-[0_0_24px_rgba(8,145,178,0.12)] sm:p-6">
+              <div className="flex flex-col justify-between gap-4 border-b border-cyan-900/70 pb-5 sm:flex-row sm:items-start">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.32em] text-cyan-400">
+                    Ceremonial Record
+                  </p>
+                  <h2 className="mt-2 text-xl font-black uppercase tracking-tight text-white sm:text-2xl">
+                    {commandAssignment.state === "completed"
+                      ? "Athena Command Assignment"
+                      : "Fireteam Assignment"}
+                  </h2>
+                  <p className="mt-2 max-w-3xl text-xs leading-5 text-slate-400">
+                    {commandAssignment.state === "completed"
+                      ? "ALEX-225's command of Athena Training Battalion is permanently recorded. The ceremony remains available for read-only replay."
+                      : "ALEX-225's permanent assignment to Fireteam Epsilon is recorded. The ceremony remains available for read-only replay."}
+                  </p>
+                </div>
+                <div className="border-l-2 border-cyan-400/70 pl-4 sm:text-right">
+                  <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                    Record Status
+                  </p>
+                  <p className="mt-1 text-sm font-black uppercase tracking-[0.15em] text-cyan-200">
+                    Complete · Recorded
+                  </p>
+                </div>
+              </div>
+
+              {commandAssignment.state === "completed" ? (
+                <CommandAssignmentCeremony
+                  initialStatus={commandAssignment}
+                  replayHref="/assembly-hall?replay=command-assignment"
+                />
+              ) : (
+                <FireteamAssignmentCeremony initialStatus={assignment} />
+              )}
+            </div>
+          ) : null}
 
           <div className="mt-5 border border-cyan-800/70 bg-[linear-gradient(135deg,rgba(2,6,23,0.96),rgba(0,0,0,0.92))] p-5 shadow-[0_0_24px_rgba(8,145,178,0.12)] sm:p-6">
             <div className="flex flex-col justify-between gap-4 border-b border-cyan-900/70 pb-5 sm:flex-row sm:items-start">
@@ -706,8 +868,12 @@ export default async function AssemblyHallPage({
                 Ceremony Archive
               </p>
               <p className="mt-3 text-xs uppercase tracking-[0.16em] text-slate-500">
-                {assignment.state === "completed"
-                  ? "1 recorded ceremony"
+                {recordedCeremonyCount > 0
+                  ? `${recordedCeremonyCount} recorded ${
+                      recordedCeremonyCount === 1
+                        ? "ceremony"
+                        : "ceremonies"
+                    }`
                   : "None at this time."}
               </p>
             </div>

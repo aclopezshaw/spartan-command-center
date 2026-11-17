@@ -40,7 +40,7 @@ Use a signed, stateless, seven-day session cookie for the current single-user ap
 
 - Sessions cannot be revoked individually before expiration without rotating the signing secret.
 - Adding `SESSION_SECRET` or rotating it signs the user out on every device.
-- Mobile clients must authenticate through a cookie-capable session flow until a separate approved client-authentication contract exists.
+- Mobile clients use the approved Bearer extension recorded in [ADR-0009](0009-mobile-bearer-sessions.md); browser sessions remain cookie-based.
 
 ### Risks
 
@@ -77,6 +77,6 @@ Deferred until multi-user identity, account recovery, roles, or external federat
 ## Reconsideration triggers
 
 - A second real user is introduced.
-- Mobile clients require non-cookie authentication.
+- The accepted mobile Bearer contract in [ADR-0009](0009-mobile-bearer-sessions.md) no longer fits the product's identity or revocation requirements.
 - Role-based access control or scoped permissions are required.
 - Individual session revocation, device management, or security-event auditing becomes necessary.

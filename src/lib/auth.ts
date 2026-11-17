@@ -1,9 +1,10 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import {
   createSessionToken,
+  getBearerToken,
   SESSION_MAX_AGE_SECONDS,
   verifySessionToken,
 } from "@/lib/session-token";
@@ -56,12 +57,20 @@ export function getSessionCookieOptions() {
 
 export async function hasAuthorizedSession() {
   const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const cookieToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const headerStore = await headers();
+  const bearerToken = getBearerToken(
+    headerStore.get("authorization")
+  );
+  const tokens = [cookieToken, bearerToken].filter(
+    (token): token is string => Boolean(token)
+  );
 
-  if (!token) return false;
+  if (tokens.length === 0) return false;
 
   try {
-    return verifySessionToken(token, getSessionSecret());
+    const secret = getSessionSecret();
+    return tokens.some((token) => verifySessionToken(token, secret));
   } catch {
     return false;
   }

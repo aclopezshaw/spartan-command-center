@@ -27,7 +27,7 @@ Every roadmap item must feed real-world data into the Progression Engine or rein
 | --- | --- | --- | --- |
 | **0.6** | Infrastructure / Foundation | The system becomes stable and trustworthy. | **Partially implemented.** Current production systems exist with verified defects and technical debt. Stabilization work is planned. |
 | **0.7** | Fireteam | The Individual becomes a Fireteam Member. | **Planned.** Architecture is accepted; Fireteam functionality is not implemented. |
-| **0.8** | Command School | The Fireteam Member becomes a leader. | **Planned.** The three releases, epic map, architecture, and exit criteria are approved; numeric Trust tuning, event content, and qualification thresholds remain unresolved. |
+| **0.8** | Command School | The Fireteam Member becomes a leader. | **Partially implemented.** Command Assignment, the Athena roster, and the Trust presentation foundation exist; numeric Trust tuning, ledger behavior, battalion event content, and qualification thresholds remain unresolved. |
 | **0.9** | Specialization School | The leader becomes a specialist. | **Planned.** The three-release structure, Academic Operations boundary, configurable Competency Matrix, privacy contract, and Combat Medic first track are approved. |
 | **1.0** | Live Operations | The specialist graduates as a Spartan and enters persistent operational service. | **Planned.** The four-release structure, Shield architecture, checkpoint outcome model, and Armory placement are approved; numeric tuning and detailed content remain unresolved. |
 
@@ -168,15 +168,15 @@ The approved release structure is:
 
 | Release | Intended outcome | Current decision state |
 | --- | --- | --- |
-| **0.8.0 Command Assignment** | Persist command role, battalion and company identity, insignia, initial leadership state, history, and the Command Trust unlock. | **Planned.** The assignment and idempotent transition boundaries are approved; narrative and asset details remain tunable. |
-| **0.8.1 Command Trust** | Convert qualifying real-world habit and leadership evidence into explainable, durable, and recoverable Trust progression. | **Planned.** Gains, gradual sustained-neglect consequences, single-miss protection, recovery, ledger, and visibility are approved; exact numeric tuning remains unresolved. |
+| **0.8.0 Command Assignment** | Persist command role, battalion and company identity, insignia, initial leadership state, history, and the Command Trust unlock. | **Partially implemented.** The canonical transition, Athena roster snapshot, exact history, ceremony, Trust unlock, gated navigation, and leadership roster exist. Phase III activation remains a separate guarded transition. |
+| **0.8.1 Command Trust** | Convert qualifying real-world habit and leadership evidence into explainable, durable, and recoverable Trust progression. | **Partially implemented.** Approved company-level numeric rules, persisted evidence/transaction ledger, day review, reconciliation and verified trend/risk/recovery views exist. Trust tiers and active-phase production verification remain planned. |
 | **0.8.2 Battalion Command** | Apply Command Trust through persistent leadership events and company outcomes, then persist Command School qualification. | **Planned.** Recoverable battalion progression and the qualification-only 0.9 handoff are approved; exact event content and qualification thresholds remain tunable. |
 
 The complete decision is recorded in [ADR-0006](adr/0006-command-school-trust-and-qualification.md).
 
 Current milestone rules include:
 
-- **Planned.** The canonical Phase III leadership identity is **Athena Command**, with the motto **WISDOM UNDER FIRE.** and the approved helmet, cobalt-shield, and five-spear patch under [SDCB #152](https://app.notion.com/p/399bc7d80f4581ff82e4d041beef0a72). The production asset is `public/images/command/athena-command-patch.png`; authoritative assignment and product integration remain part of 0.8.0.
+- **Implemented.** The canonical Phase III leadership identity is **Athena Command**, with the motto **WISDOM UNDER FIRE.**, the approved helmet/cobalt-shield/five-spear patch, the Athena Training Battalion roster, and a completion-gated leadership page. The production asset is `public/images/command/athena-command-patch-v2.png`; broader command-system integration remains part of 0.8.
 - Command Assignment persists once before the ceremony, history, or Command Trust unlock is considered complete. [SDCB #266](https://app.notion.com/39ebc7d80f4581ebb981ce9d9d56e1de).
 - Command Trust uses authoritative, attributable, idempotent state changes. [SDCB #258](https://app.notion.com/39ebc7d80f458103b2a7fc3e771b4f05).
 - Consistent qualifying behavior produces gains; sustained non-completion of eligible habits may produce gradual bounded losses.
@@ -188,6 +188,8 @@ Current milestone rules include:
 ### 0.9 Specialization School
 
 **Milestone outcome:** Transform the leader into a specialist.
+
+**Deferred.** At the product owner's direction on 2026-11-10, Phase IV / milestone 0.9 implementation is postponed until the Phase III full-version work is complete; its accepted architecture remains intact.
 
 The approved release structure is:
 

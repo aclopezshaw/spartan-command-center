@@ -1,7 +1,10 @@
 import {
     getActiveCampaignEventState,
     getAlexServiceRecord,
+    getCommandAssignmentStatus,
     getCompletedCampaignMedals,
+    getUnratedCampaignMedals,
+    getCompetitionPlacements,
     getCampaignPhaseXpSummary,
     getPromotionStatus,
     getReadinessLedgerStatus,
@@ -18,6 +21,11 @@ import Image from "next/image";
 import NavBar from "../../components/NavBar";
 import PageHeader from "../../components/PageHeader";
 import CampaignMedalCard from "../../components/CampaignMedalCard";
+import UnratedCampaignMedalCard from "../../components/UnratedCampaignMedalCard";
+import CompetitionTrophyCard from "../../components/CompetitionTrophyCard";
+import { getAwardedCommandInsignia } from "@/lib/personnel-insignia";
+import Link from "next/link";
+import { trophyLevel } from "@/lib/competition-trophies";
 
 function getTitleProperty(properties: any, propertyName: string) {
     return properties[propertyName]?.title?.[0]?.plain_text ?? "";
@@ -347,15 +355,25 @@ export default async function Home() {
         promotion,
         readinessLedger,
         campaignMedals,
+        competitionPlacements,
+        commandAssignment,
     ] = await Promise.all([
         getActiveCampaignEventState(),
         getPromotionStatus(),
         getReadinessLedgerStatus(),
         getCompletedCampaignMedals(),
+        getCompetitionPlacements(),
+        getCommandAssignmentStatus().catch(() => null),
     ]);
     const phaseXpSummary = await getCampaignPhaseXpSummary(
         activeCampaignEventState
     );
+    const unratedMedals = await getUnratedCampaignMedals(phaseXpSummary ? {
+        phaseId: activeCampaignEventState.phaseId,
+        earnedXp: phaseXpSummary.earnedXp,
+        earnedMedal: phaseXpSummary.earnedMedal,
+    } : null);
+    const commandInsignia = commandAssignment ? getAwardedCommandInsignia(commandAssignment) : null;
     const readiness = readinessLedger.authoritativeTotals;
     const readinessTrends = calculateReadinessTrends({
         entries: readinessLedger.entries,
@@ -493,6 +511,27 @@ const properties = (freshRecord as any).properties;
 
                 <section className="border border-cyan-600/60 bg-slate-950/90 p-6 shadow-[0_0_30px_rgba(8,145,178,0.25)]">
                     <PageHeader eyebrow="UNSC Personnel File" title="Service Record" />
+
+                    <section aria-label="Command identity" className="mt-6 border border-cyan-700/50 bg-black/60 p-5">
+                        <p className="text-xs uppercase tracking-[0.3em] text-cyan-400">Command Assignment</p>
+                        {commandInsignia && commandAssignment ? (
+                            <div className="mt-4 flex flex-col gap-5 sm:flex-row sm:items-center">
+                                <Image src={commandInsignia.path} alt={`${commandInsignia.label} patch`} width={112} height={112} className="h-28 w-28 shrink-0 object-contain drop-shadow-[0_0_16px_rgba(34,211,238,0.35)]" />
+                                <div className="min-w-0">
+                                    <h2 className="text-xl font-black uppercase tracking-[0.12em] text-cyan-100">{commandAssignment.persisted.commandName}</h2>
+                                    <p className="mt-2 text-sm text-slate-200">{commandAssignment.persisted.battalionName} · {commandAssignment.persisted.role}</p>
+                                    <p className="mt-2 text-xs uppercase tracking-[0.15em] text-slate-400">Assigned {commandAssignment.persisted.assignedAt} · Permanent assignment</p>
+                                    <p className="mt-3 text-xs uppercase tracking-[0.2em] text-cyan-300">{commandAssignment.persisted.motto}</p>
+                                    <div className="mt-4 flex flex-wrap gap-4 text-xs text-cyan-300">
+                                        <Link className="underline underline-offset-4" href="/assembly-hall?replay=command-assignment">View ceremony record</Link>
+                                        <Link className="underline underline-offset-4" href="/campaign-history?filter=assignments">Assignment history</Link>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <p className="mt-3 text-sm text-slate-400">{!commandAssignment ? "Command identity is temporarily unavailable." : commandAssignment.state === "conflict" || commandAssignment.state === "finalizing" ? "Command assignment requires record reconciliation." : "Command insignia is awarded after the assignment is complete and verified."}</p>
+                        )}
+                    </section>
 
                     <div className="mt-6 grid gap-6 lg:grid-cols-[2fr_1fr]">
                         <div className="space-y-6">
@@ -658,12 +697,18 @@ const properties = (freshRecord as any).properties;
                             <div className="mt-8">
                                 <div className="mb-4">
                                     <p className="text-xs uppercase tracking-[0.3em] text-cyan-400">
-                                        Campaign Medals
+                                        Medals &amp; Trophies
                                     </p>
                                 </div>
 
-                                {campaignMedals.length > 0 ? (
+                                {campaignMedals.length > 0 || unratedMedals.length > 0 || competitionPlacements.some(record => trophyLevel(record)) ? (
                                     <div className="space-y-4">
+                                        {competitionPlacements.filter(record => trophyLevel(record)).map(record => (
+                                            <CompetitionTrophyCard key={`trophy:${record.phaseId}`} record={record} />
+                                        ))}
+                                        {unratedMedals.map(medal => (
+                                            <UnratedCampaignMedalCard key={`unrated:${medal.id}`} medal={{ ...medal, phaseName: getCampaignPhaseDisplayName(medal.phaseName) }} />
+                                        ))}
                                         {campaignMedals.map((medal) => (
                                             <CampaignMedalCard
                                                 key={medal.id}
@@ -683,7 +728,7 @@ const properties = (freshRecord as any).properties;
                                             None at this time.
                                         </p>
                                         <p className="mx-auto mt-3 max-w-[240px] text-[10px] uppercase leading-relaxed tracking-[0.16em] text-slate-600">
-                                            Campaign medals will be entered upon phase completion.
+                                            Campaign medals and earned placement trophies will be entered after final phase results verify.
                                         </p>
                                     </div>
                                 )}

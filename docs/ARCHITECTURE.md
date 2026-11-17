@@ -1,9 +1,21 @@
 # Architecture
 
+**Implemented.** `getLeadershipDashboard` reads command acceptance and player readiness, then independently composes the active phase and existing Trust/Cohesion/Rankings read authorities when eligible. `buildLeadershipDashboard` produces a sanitized read-only model with hold/current/partial/unavailable states, attributable guidance and no synthetic morale. The Server Component `/command/dashboard` and independently authenticated GET `/api/command/dashboard` consume the same model. Neither performs reconciliation or progression writes. See [Leadership Dashboard Contract](LEADERSHIP_DASHBOARD_CONTRACT.md).
+
+**Implemented.** `battalion-rankings-store.ts` consumes `getVerifiedBattalionEvidence` after Phase III review application: verified successful attempt → deterministic Fireteam-engine adapter → immutable phase/event System standings record → validated cumulative board. `/api/command/rankings` supports authenticated read/reconciliation and `/command/leaderboard` renders sanitized standings. At Day 56 with all eight results, reconciliation writes the permanent zero-XP placement consumed by Service Record trophies. Reads do not write; phase activation remains separate. See [Battalion Rankings Contract](BATTALION_RANKINGS_CONTRACT.md).
+
+**Implemented.** Phase III `/api/complete-event` reviews use `reviewBattalionEvent` in `src/lib/battalion-cohesion-store.ts`: authenticated review → canonical command/active phase and sequence checks → immutable zero-XP Service History attempt → event failure/retry or normal XP completion → verified shared Battalion Cohesion replay. The journal does not populate Related Event, preserving the existing exactly-one XP-history contract. `/api/command/cohesion` and `/command/cohesion` expose verified scores or explicit hold/recovery/conflict states. See [Battalion Cohesion Contract](BATTALION_COHESION_CONTRACT.md).
+
 **Document status:** Living description of current architecture  
 **Last verified:** 2026-07-26
 
 ## Overview
+
+The Service Record's Medals & Trophies rail combines unchanged frozen campaign medals with trophies derived from validated permanent final-placement history. Phase II reconciliation is an explicit, guarded zero-XP backfill; Phase III finalization remains planned alongside its rankings engine. See [Competition Trophies](COMPETITION_TROPHIES.md).
+
+Trust status responses include read-only company insights from `buildCommandTrustInsights` only after the persisted evidence/ledger match verifies. The Trust page presents attributed seven-day changes, confirmed-day risk, review gaps and source-based recovery opportunities; it does not compute rewards in the client. See [Command Trust Contract](COMMAND_TRUST_CONTRACT.md).
+
+Command Trust is implemented through the pure company evaluator in `src/lib/command-trust.ts` and the server persistence boundary in `src/lib/command-trust-store.ts`. The authenticated Trust API and `/command/trust` consume uniquely verified immutable evidence snapshots in Service History; stale evidence hides balances until reconciliation. Daily and weekly updates schedule replay after the response, while explicit past-day confirmation/excusal controls distinguish neglect from missing data. Activation and Notion concurrency/recovery constraints are defined in [Command Trust Contract](COMMAND_TRUST_CONTRACT.md).
 
 Spartan Command Center is a single Next.js 16 application using the App Router under `src/app`. It combines Server Components, Client Components, Route Handlers, static assets, and direct server-side Notion SDK calls.
 
@@ -99,14 +111,15 @@ database ID, keeping both Intel routes on the same Notion API contract.
 
 ## Authentication and authorization
 
-[ADR-0008](adr/0008-signed-single-user-sessions.md) records the current single-user session boundary.
+[ADR-0008](adr/0008-signed-single-user-sessions.md) records the current single-user session boundary. [ADR-0009](adr/0009-mobile-bearer-sessions.md) records its mobile Bearer extension.
 
 1. `POST /api/login` validates the ALEX-225 designation and server-held `SITE_PASSWORD`, then signs a versioned seven-day token with the production `SESSION_SECRET`.
 2. The response stores the token in the `scp_session` cookie with `HttpOnly`, production `Secure`, `SameSite=Strict`, path `/`, and high-priority attributes. It deletes the retired `scp_auth` cookie.
-3. `hasAuthorizedSession` reads the cookie through the asynchronous Next.js `cookies()` API and rejects malformed, tampered, wrong-secret, expired, future-dated, or wrong-subject tokens.
-4. `ProtectedLayout` applies that verifier to all protected pages. Every private Route Handler applies the same verifier independently because layouts do not authorize Route Handlers.
-5. `POST /api/logout` deletes both current and legacy authentication cookies. Login and logout are the only public Route Handlers.
-6. Production fails closed if a dedicated `SESSION_SECRET` of at least 32 bytes is unavailable. Local development may derive a development-only key from `SITE_PASSWORD`.
+3. `POST /api/mobile/session` applies the same bounded credential comparison and returns the same signed token without setting a cookie. The mobile client stores it in Expo SecureStore and submits it through a strict `Authorization: Bearer <token>` header.
+4. `hasAuthorizedSession` reads the cookie and authorization header through the asynchronous Next.js `cookies()` and `headers()` APIs. Either valid signed token authorizes the request; malformed, tampered, wrong-secret, expired, future-dated, or wrong-subject tokens fail closed.
+5. `ProtectedLayout` applies that verifier to all protected pages. Every private Route Handler applies the same verifier independently because layouts do not authorize Route Handlers.
+6. `POST /api/logout` deletes both current and legacy authentication cookies. `/api/login`, `/api/logout`, and the credential-protected `/api/mobile/session` exchange are the only public Route Handlers.
+7. Production fails closed if a dedicated `SESSION_SECRET` of at least 32 bytes is unavailable. Local development may derive a development-only key from `SITE_PASSWORD`.
 
 ## Main request flows
 
@@ -149,17 +162,21 @@ Daily record selection and hydration aggregation now share the America/Denver op
 7. Event and standings writes use exact-record recovery and in-process concurrency coalescing. Retries return or repair the persisted resolution; duplicate records surface as conflicts instead of rerolling.
 8. Successful completion clears the retry day. Failed, retry-ready, and terminal-failed presentation survives refresh, past-due events remain incomplete and actionable, cooldown copy never renders zero or negative days, and a phase with every authoritative event completed renders `All Events Complete for This Phase`.
 9. Legacy catalog entries remain presentation fallbacks for event copy and artwork while scheduling, readiness requirements, retry policy, phase scope, and completion state come from Notion.
+10. The staged Phase III contract contains eight Events on days 5–40 and reserves days 45, 50, and 55 for five-day cascading retries. `filterCampaignEventsByPhase` excludes stale Events from other phases before the retry schedule is calculated, and the final remaining Event must still fit by day 55 so day 56 remains the completion boundary.
+11. Phase III repository fallbacks provide presentation and test fixtures only. They cannot activate the `Upcoming` Notion phase, set its start date, or trigger campaign rollover. Phase II Fireteam Standings remain isolated behind the Phase II Event allowlist. See [`PHASE_III_EVENT_CONTRACT.md`](PHASE_III_EVENT_CONTRACT.md).
 
 ### Campaign phase rollover
 
-1. Authenticated `GET /api/campaign/rollover` discovers Campaign Operations through authoritative Event relations and selects only the immediate, same-campaign next phase whose Denver start date is due.
+1. Authenticated `GET /api/campaign/rollover` discovers Campaign Operations through authoritative Event relations and selects the current active campaign run's immediate same-campaign transition before older completed or superseded runs. Inspection retains that transition when the incoming start date is unset or future so it can report the exact launch hold; eligibility still requires the Denver start date to be due.
 2. `evaluateRollover` in `src/lib/campaign-rollover.ts` blocks an outgoing phase with no events or any event lacking `Defeated`, a completion date, or linked Service History.
 3. Authenticated `POST /api/campaign/rollover` is the explicit mutation boundary. HUD and page reads do not cause rollover writes.
 4. Before changing phase status, the operation calculates exact phase-scoped Daily SITREP, Weekly Operations, and linked Service History event XP. It expands the phase's per-day and per-week objective pools across its length, calculates thresholds from maximum habit XP plus mandatory event XP, and writes a versioned immutable result to the outgoing Campaign Operations row.
 5. A missing or duplicate linked event-history record blocks the snapshot. Once `Phase Finalized At` exists, retries read and verify the existing snapshot rather than recalculating or overwriting it.
 6. The operation then reconciles exactly one phase-completion Campaign history record, blocks duplicate transition histories, writes the outgoing phase Complete, writes the incoming phase Active, and re-reads the authoritative records.
 7. After rollover verifies, it persists and verifies the Service Record's Individual completion eligibility. Retries resume snapshot-only, history-only, source-only, target-only, or eligibility-only partial states.
-8. A module-level promise coalesces concurrent requests in one server process; cross-process exclusivity remains constrained by Notion's lack of transactions and unique constraints.
+8. If the final operational day passes with every outgoing Event complete but no valid next-phase record available, the Command HUD enters an explicit intermission presentation. The outgoing phase remains the active Notion authority, its XP window remains capped at the configured phase end date, Daily SITREP and Weekly Operations continue normally, and no rollover write occurs until an eligible target exists.
+9. A module-level promise coalesces concurrent requests in one server process; cross-process exclusivity remains constrained by Notion's lack of transactions and unique constraints.
+10. Only an active Notion Phase III label enables the minimum Athena Command HUD layer. The existing objective and Event surfaces remain shared, while the command patch, battalion/role identity, `Command Active` status, and safe Assembly Hall background are added without exposing proposed Trust or ranking data. An intermission label cannot enable this presentation.
 
 Operational inspection and recovery are documented in [`CAMPAIGN_ROLLOVER_RUNBOOK.md`](CAMPAIGN_ROLLOVER_RUNBOOK.md).
 
@@ -174,9 +191,9 @@ Operational inspection and recovery are documented in [`CAMPAIGN_ROLLOVER_RUNBOO
 
 ### Ceremonial events and the Assembly Hall
 
-1. `getCeremonialEvent` and `getPromotionCeremonialEvent` in `src/lib/ceremonial-events.ts` translate authoritative assignment or promotion states into presentation-only Personnel Command orders. Fireteam Assignment and Promotion orders remain visible through interrupted history finalization; a Promotion order first appears when the durable awarded rank is below an XP-earned conventional threshold.
+1. `getCeremonialEvent`, `getCommandCeremonialEvent`, and `getPromotionCeremonialEvent` in `src/lib/ceremonial-events.ts` translate authoritative assignment or promotion states into presentation-only Personnel Command orders. Fireteam Assignment, Command Assignment, and Promotion orders remain visible through their supported active or interrupted states; a Promotion order first appears when the durable awarded rank is below an XP-earned conventional threshold.
 2. A Ceremonial Event is not a Campaign Event. Its contract explicitly carries zero XP, readiness, and standings rewards and routes to `/assembly-hall`; later medal, command-assignment, specialization, and graduation eligibility may use the same order shape.
-3. `CommandHudPage` evaluates Fireteam Assignment and Promotion status on the server and passes the highest-priority resulting order to `EventSystem`. A due Campaign Event retains presentation priority; otherwise the ceremonial order occupies the same right-side event slot and links directly to the hall.
+3. `CommandHudPage` evaluates Fireteam Assignment, Command Assignment, and Promotion status on the server and passes the highest-priority resulting order to `EventSystem`. A due Campaign Event retains presentation priority; otherwise the ceremonial order occupies the same right-side event slot and links directly to the hall.
 4. `/assembly-hall` is a dynamic Server Component that renders the permanent location from live eligibility and assignment evidence. `FireteamAssignmentCeremony` begins the ceremony, advances four monotonic persisted presentation steps, accepts the assignment, presents recovery when finalization is incomplete, and offers a read-only replay after completion.
 5. Beginning the ceremony is an explicit mutation. It freezes and verifies the Phase I XP/medal snapshot when eligibility is `ready_to_finalize`, reconciles eligibility to `eligible`, and then writes `In Progress`; ordinary reads never freeze XP.
 6. The authenticated `/api/progression/fireteam-assignment` Route Handler accepts only `begin`, `progress`, or `complete`. The server owns Fireteam Epsilon's ID, name, motto, five stable member IDs, assignment version, operation ID, roster snapshot, and initial `Acquaintance I` teammate baselines; the client cannot submit or reroll identity.
@@ -187,6 +204,8 @@ Operational inspection and recovery are documented in [`CAMPAIGN_ROLLOVER_RUNBOO
 11. Authenticated `GET /api/progression/promotion` is read-only. It also verifies the exact prior-to-current Promotion history for every awarded conventional rank above Recruit. A missing row produces recoverable `finalizing`; duplicates or malformed evidence produce `conflict`.
 12. `POST` requires the exact prior/current rank page IDs from a recovery order or current/target IDs from a new order, rechecks XP eligibility, advances at most one rank relation, and reconciles exactly one zero-reward `Promotion` Service History row linked to ALEX-225. The title and description preserve both ranks and the row date is the durable ceremony-completion date. The HUD summons clears only after both records verify; stale orders block and exact retries return the existing transition.
 13. A keyed module-level promise coalesces identical in-process promotion requests. Notion still cannot enforce a distributed unique constraint, so duplicate history evidence blocks further progression for explicit reconciliation.
+14. Active assignment or promotion orders render their controls over the active hall plate. With no active order, the standby hall plate remains unobstructed and the latest implemented completed assignment renders as a separate read-only ceremonial record between the hall and Promotion Readiness; completed Athena Command takes precedence over the earlier Fireteam record. Its archive replay uses an allowlisted page query to restore the full active-hall presentation without exposing any mutation action, then removes that query when the replay exits.
+15. A completed canonical Command Assignment may retain its identity, original assignment date, exact history, and Trust unlock while its status and saved step are reset to `In Progress` and zero for a one-time user acknowledgment. The evaluator exposes that reopened ceremony to the HUD and Assembly Hall. Advancing remains monotonic, and final acceptance restores `Complete` and the maximum step after re-verifying the existing durable evidence.
 
 ### Personnel insignia
 
@@ -221,26 +240,29 @@ than being dropped.
 
 ### Academic assignment flow
 
-1. `MedicalUnitPage` calls `/api/smu/orders` and `/api/smu/pipeline`.
-2. Route Handlers query the Assignments data source.
-3. The orders endpoint returns focus, due-soon, and critical groups.
+1. `MedicalUnitPage` calls the domain-neutral `/api/v1/academic/today` read contract and the existing `/api/smu/pipeline` endpoint.
+2. `getAcademicToday` owns active-quarter filtering, Notion assignment normalization, Denver operational-date boundaries, lane ordering, and cross-lane deduplication.
+3. The versioned Today contract returns its schema version, operational date, due-soon window, and Focus Queue, Overdue, Due Soon, and Plan Ahead lanes. `/api/smu/orders` remains a compatibility adapter over the same service and preserves the legacy `nextCritical` field.
 4. The pipeline endpoint paginates all assignments and calculates per-course required and optional completion, remaining weekly minutes, overdue work, skipped work, and the next exam.
 5. The authenticated quarter endpoint reads the active and up-next records from the Notion Quarters data source.
 6. `/api/smu/orders/complete` updates an assignment Status to Complete.
+7. Academic routes accept the shared signed-session boundary. The Expo client can consume the versioned endpoint with its encrypted Bearer session; Jarvis still needs an approved credential-handling and least-privilege integration contract.
 
 ## Security boundary
 
 Every Route Handler is a public HTTP entry point and must verify authorization
 independently. Every current private handler calls `hasAuthorizedSession`; the
 authorization regression suite enumerates the Route Handler tree and fails if a
-private entry point omits that boundary. `/api/login` and `/api/logout` are the
-only public handlers. `ProtectedLayout` protects page rendering only, and
+private entry point omits that boundary. `/api/login`, `/api/logout`, and
+`/api/mobile/session` are the only public handlers; the mobile session exchange
+is credential-protected. `ProtectedLayout` protects page rendering only, and
 `proxy.disabled.ts` is disabled by filename; neither substitutes for
 Route Handler authorization.
 
 The signed-session and private-handler boundary was implemented under
 [SDCB #192](https://app.notion.com/p/39cbc7d80f45818293afd11fc4c17bae)
-and is recorded in [ADR-0008](adr/0008-signed-single-user-sessions.md).
+and is recorded in [ADR-0008](adr/0008-signed-single-user-sessions.md) and
+[ADR-0009](adr/0009-mobile-bearer-sessions.md).
 
 ## Persistence boundaries
 

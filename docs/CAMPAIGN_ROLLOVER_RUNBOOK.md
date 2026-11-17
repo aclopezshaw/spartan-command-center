@@ -9,9 +9,15 @@ The protected `/api/campaign/rollover` Route Handler owns durable phase status r
 
 Rollover is explicit. Loading the Command HUD or another Server Component cannot mutate campaign phase state.
 
+If every Event is complete but no eligible incoming phase exists, the Command HUD enters an intermission after the final operational day. Intermission is a presentation and operational hold, not a synthetic Campaign Operations phase: the outgoing phase remains Active, its scoring window remains capped at its configured end date, and ordinary Daily SITREP and Weekly Operations records continue.
+
 ## Eligibility
 
-The server selects the immediate next phase in the same campaign and requires:
+The server selects the active campaign run's immediate next phase before older
+completed or superseded campaign runs. It retains the selected transition for
+read-only inspection when the incoming date is unset or future so the response
+reports that exact blocker instead of falling back to a historical transition.
+Execution requires:
 
 - the incoming phase's `Phase Start Date` is on or before the current America/Denver operational date;
 - the outgoing phase is Active or is a recoverable partially completed transition;
@@ -38,7 +44,7 @@ GET /api/campaign/rollover
 
 The response state is:
 
-- `blocked` — no transition is due, an event is unresolved, or phase statuses are unsupported;
+- `blocked` — the current transition has no due start date, an event is unresolved, or phase statuses are unsupported;
 - `ready` — all eligibility checks pass and no writes have started;
 - `recovery` — at least one durable rollover write exists and the operation can resume;
 - `complete` — history, outgoing Complete, and incoming Active states are verified.
@@ -66,10 +72,16 @@ The operation:
 5. writes `Phase Status` on the outgoing phase to Complete;
 6. writes both fields on the incoming phase to Active;
 7. re-reads the phase records and requires rollover state `complete`;
-8. reconciles and verifies the Service Record's versioned Individual completion state as `Eligible` (or preserves terminal `Assigned`);
+8. reconciles and verifies the Service Record's versioned Individual completion state as `Eligible` (or preserves terminal `Assigned`), retaining any later earned progression stage such as `Command School`;
 9. returns only after both durable states verify.
 
 An ineligible transition returns `409`. An unexpected write or verification error returns `500`. After a `500`, inspect with GET and retry POST; the operation is designed to reconcile its prior writes instead of duplicating the history record.
+
+`getIndividualCompletionProgressionStage` in `src/lib/individual-completion.ts`
+prevents reconciliation of earlier training from resetting a later earned stage.
+The Phase III launch exposed the legacy reset to Fireteam Member; the launch
+repair restored only the pre-rollover Command School stage. Do not replay a
+completed ceremony or rewrite its identity/history to repair this label.
 
 ## Manual verification
 

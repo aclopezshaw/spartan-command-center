@@ -13,6 +13,15 @@ export type PersistedIndividualCompletionStatus =
   | "Assigned"
   | null;
 
+/** Reconciliation of earlier training must preserve a later earned stage. */
+export function getIndividualCompletionProgressionStage(
+  state: IndividualCompletionState,
+  currentStage: string | null,
+) {
+  if (state !== "assigned") return currentStage ?? "Individual";
+  return currentStage && currentStage !== "Individual" ? currentStage : "Fireteam Member";
+}
+
 export type IndividualCompletionEvaluation = {
   state: IndividualCompletionState;
   ceremonyAvailable: boolean;

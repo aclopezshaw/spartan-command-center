@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
-import { getTodaySitrep } from "@/lib/notion";
+import {
+  getOrCreateWeeklyOperations,
+  getTodaySitrep,
+  getWorkoutCountForWeek,
+  updateWeeklyOperationCheckbox,
+} from "@/lib/notion";
 import { hasAuthorizedSession } from "@/lib/auth";
+import { getOperationalWeekRange } from "@/lib/date";
+import { buildMobileWeeklyObjectives } from "@/lib/mobile-hud";
+import { getWeeklyRules } from "@/lib/weekly-operations";
 
 function getCheckbox(page: any, propertyName: string) {
   return page?.properties?.[propertyName]?.checkbox ?? false;
@@ -14,7 +22,28 @@ export async function GET() {
     );
   }
 
-  const todaySitrep = await getTodaySitrep();
+  const { startDateKey: weekStart } = getOperationalWeekRange(
+    new Date(),
+    0
+  );
+  const [todaySitrep, weeklyOperations, workoutsThisWeek] =
+    await Promise.all([
+      getTodaySitrep(),
+      getOrCreateWeeklyOperations(weekStart),
+      getWorkoutCountForWeek(weekStart),
+    ]);
+  const weeklyWorkoutsComplete = getCheckbox(
+    weeklyOperations,
+    "Workouts"
+  );
+
+  if (workoutsThisWeek >= getWeeklyRules(weekStart).workoutTarget && !weeklyWorkoutsComplete) {
+    await updateWeeklyOperationCheckbox(
+      weeklyOperations.id,
+      "Workouts",
+      true
+    );
+  }
 
   return NextResponse.json({
     callsign: "ALEX-225",
@@ -30,10 +59,10 @@ export async function GET() {
       { id: "meds", label: "Take Meds", completed: getCheckbox(todaySitrep, "Meds"), xp: 10 },
       { id: "read", label: "Read 1 Chapter", completed: getCheckbox(todaySitrep, "Read"), xp: 10 },
     ],
-    weekly: [
-      { id: "workouts", label: "Workouts 2/3", completed: false, xp: 200 },
-      { id: "tshot", label: "T-Shot", completed: false, xp: 50 },
-      { id: "plan-week", label: "Plan Week", completed: false, xp: 50 },
-    ],
+    weekly: buildMobileWeeklyObjectives({
+      weekStart,
+      weeklyOperations,
+      workoutsThisWeek,
+    }),
   });
 }

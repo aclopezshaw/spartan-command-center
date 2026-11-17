@@ -54,6 +54,7 @@ export const UNIT_COHESION_HABITS: Record<
     Shower: { category: "Professional", memberId: "epsilon-zoe" },
   },
   weekly: {
+    "SMU Classwork": { category: "Intelligence", memberId: "epsilon-paige" },
     Workouts: { category: "Physical", memberId: "epsilon-michael" },
     Shot: { category: "Recovery", memberId: "epsilon-ellie" },
     Planning: { category: "Professional", memberId: "epsilon-zoe" },
